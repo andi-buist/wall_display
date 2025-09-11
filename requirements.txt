@@ -1,0 +1,6 @@
+cartopy==0.25.0
+matplotlib==3.10.6
+paho_mqtt==2.1.0
+Pillow==11.3.0
+Requests==2.32.5
+webcolors==24.11.1
