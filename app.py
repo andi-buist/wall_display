@@ -369,27 +369,22 @@ class EntityMapSnap(ttk.Frame):
 
 
         match math.floor(math.log2(_square_aspect_diff / _minimum_aspect)):
-            case 0: _zoom_level = 17
-            case 1: _zoom_level = 16
-            case 2: _zoom_level = 15
-            case 3: _zoom_level = 14
-            case 4: _zoom_level = 13
-            case 5: _zoom_level = 12
-            case 6: _zoom_level = 11
-            case 7: _zoom_level = 10
-            case 8: _zoom_level = 9
-            case 9: _zoom_level = 8
-            case 10: _zoom_level = 7
-            case 11: _zoom_level = 6
-            case 12: _zoom_level = 5 
-            case _: _zoom_level = 4
+            case 0: _zoom_level = 18
+            case 1: _zoom_level = 17
+            case 2: _zoom_level = 16
+            case 3: _zoom_level = 15
+            case 4: _zoom_level = 14
+            case 5: _zoom_level = 13
+            case 6: _zoom_level = 12
+            case 7: _zoom_level = 11
+            case 8: _zoom_level = 10
+            case 9: _zoom_level = 9
+            case 10: _zoom_level = 8
+            case 11: _zoom_level = 7
+            case 12: _zoom_level = 6 
+            case _: _zoom_level = 5
 
         ax.add_image(tiles, _zoom_level)
-        #ax.add_feature(global_cartopy_features['land'])
-        # ax.add_feature(global_cartopy_features['ocean'], linewidth=1)
-        # ax.add_feature(global_cartopy_features['lakes'], linewidth = 1, linestyle = '--')
-        # ax.add_feature(global_cartopy_features['rivers'], linewidth=1)
-        # ax.add_feature(global_cartopy_features['bodr'], linestyle='-', edgecolor='k', alpha=1)
 
         _text_objects = []
         for entity in zones:
@@ -408,7 +403,7 @@ class EntityMapSnap(ttk.Frame):
                         fontsize = 20,
                         color = "#ffffff",
                         horizontalalignment = 'center',
-                        bbox = dict(facecolor = "#333333", edgecolor = "#000000", linewidth = 1.5)
+                        bbox = dict(facecolor = "#000000", edgecolor = "#000000", linewidth = 1.5)
                         ))
             #point
             ax.plot(entity['attributes']['longitude'], 
@@ -418,19 +413,21 @@ class EntityMapSnap(ttk.Frame):
                     color = "#000000",
                     mfc = "#444444")
         
+        with open("./data/person_position_log.json") as json_data:
+            movement_history = json.load(json_data)
+            json_data.close()
+
         for entity in people:
             #get position history if present, else make, trim to most recent N and append current
-            position_history = entity_cache_read(entity['entity_id'],
-                                                 'latlon',
-                                                 [])
-            position_history = position_history[-min(len(position_history), 99):]
-            position_history.append((entity['attributes']['longitude'], entity['attributes']['latitude']))
-            
-            entity_cache_write(entity['entity_id'],
-                               'latlon',
-                               position_history)
+            position_history = movement_history[entity['entity_id']]
+            _current_position = [entity['attributes']['longitude'], entity['attributes']['latitude']]
 
-            # movement history
+            if len(position_history) == 0 or _current_position != position_history[-1]:
+                position_history.append(_current_position)
+                position_history = position_history[-min(len(position_history), 100):] # trim
+                movement_history[entity['entity_id']] = position_history # assign back
+
+            # position history
             ax.plot(*zip(*position_history),
                     color = "#444444",
                     linewidth = 4)
@@ -456,6 +453,9 @@ class EntityMapSnap(ttk.Frame):
                     marker = 'o',
                     color = "#000000",
                     mfc = "#ffffff")
+        with open("./data/person_position_log.json", 'w') as file_write:
+            json.dump(movement_history, file_write)
+        
         adjust_text(_text_objects, arrowprops=dict(arrowstyle = '-', color = "#000000", linewidth = 3))
         
         image_buffer = BytesIO()
