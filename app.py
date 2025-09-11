@@ -471,7 +471,7 @@ notebook.pack(side = tk.RIGHT,
 light_switches = EntityButton(light_menu, client, 'light')
 light_switches.grid(row = 0, columnspan = 2)
 
-light_sliders = EntitySlider(light_menu, client, 'light', orient = 'vertical')
+light_sliders = EntitySlider(light_menu, client, entity_id = 'light.desk_light', orient = 'vertical')
 light_sliders.grid(column = 0, row = 1, ipadx = 10)
 
 light_rgb = EntityRGBSpinners(light_menu, client, entity_id = 'light.desk_light')
