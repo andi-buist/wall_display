@@ -12,6 +12,8 @@ import matplotlib
 matplotlib.use('agg') # permits starting matplotlib contexts in classes (EntityMapSnap)
 import matplotlib.pyplot as plt
 
+from adjustText import adjust_text
+
 from cartopy import crs as ccrs
 from cartopy import feature as cfeature
 from cartopy.io import img_tiles as ctiles
@@ -343,7 +345,7 @@ class EntityMapSnap(ttk.Frame):
 
         _lonlat_diff = (max([x['attributes']['longitude'] for x in people]) - min([x['attributes']['longitude'] for x in people]),
                         max([x['attributes']['latitude'] for x in people]) - min([x['attributes']['latitude'] for x in people]))
-        _square_aspect_diff = max(max(_lonlat_diff), _minimum_aspect * 64) # don't zoom in past target
+        _square_aspect_diff = max(max(_lonlat_diff), _minimum_aspect) # don't zoom in past target
         _lonlat_centroid = (min([x['attributes']['longitude'] for x in people]) + (_lonlat_diff[0]/2),
                             min([x['attributes']['latitude'] for x in people]) + (_lonlat_diff[1]/2))
         _lonlat_buffer = _square_aspect_diff * 0.1
@@ -389,14 +391,33 @@ class EntityMapSnap(ttk.Frame):
         # ax.add_feature(global_cartopy_features['rivers'], linewidth=1)
         # ax.add_feature(global_cartopy_features['bodr'], linestyle='-', edgecolor='k', alpha=1)
 
+        _text_objects = []
         for entity in zones:
+            if len(entity['attributes']['persons']) > 0:
+                # label stem
+                ax.plot(*zip(*[(entity['attributes']['longitude'], entity['attributes']['latitude']),
+                            (entity['attributes']['longitude'], entity['attributes']['latitude'] - _lonlat_buffer)]), # little spacing to hover below point
+                        color = "#000000",
+                        linewidth = 3)
+                # label
+                _text_objects.append(
+                    ax.text(
+                        entity['attributes']['longitude'],
+                        entity['attributes']['latitude'] - _lonlat_buffer, # little spacing to hover below point
+                        entity['attributes']['friendly_name'],
+                        fontsize = 20,
+                        color = "#ffffff",
+                        horizontalalignment = 'center',
+                        bbox = dict(facecolor = "#333333", edgecolor = "#000000", linewidth = 1.5)
+                        ))
+            #point
             ax.plot(entity['attributes']['longitude'], 
                     entity['attributes']['latitude'],
                     markersize = 4,
                     marker = 'o',
                     color = "#000000",
                     mfc = "#444444")
-
+        
         for entity in people:
             #get position history if present, else make, trim to most recent N and append current
             position_history = entity_cache_read(entity['entity_id'],
@@ -412,19 +433,22 @@ class EntityMapSnap(ttk.Frame):
             # movement history
             ax.plot(*zip(*position_history),
                     color = "#444444",
-                    linewidth = 2)
+                    linewidth = 4)
             # label stem
             ax.plot(*zip(*[(entity['attributes']['longitude'], entity['attributes']['latitude']),
                            (entity['attributes']['longitude'], entity['attributes']['latitude'] + _lonlat_buffer)]), # little spacing to hover above point
                     color = "#000000",
-                    linewidth = 2)
+                    linewidth = 3)
             # label
-            ax.text(entity['attributes']['longitude'], 
+            _text_objects.append(
+                ax.text(
+                    entity['attributes']['longitude'],
                     entity['attributes']['latitude'] + _lonlat_buffer, # little spacing to hover above point
                     entity['attributes']['friendly_name'],
                     fontsize = 20,
                     horizontalalignment = 'center',
-                    bbox = dict(facecolor = "#ffffff", edgecolor = "#000000"))
+                    bbox = dict(facecolor = "#ffffff", edgecolor = "#000000", linewidth = 1.5)
+                    ))
             # point
             ax.plot(entity['attributes']['longitude'], 
                     entity['attributes']['latitude'],
@@ -432,6 +456,7 @@ class EntityMapSnap(ttk.Frame):
                     marker = 'o',
                     color = "#000000",
                     mfc = "#ffffff")
+        adjust_text(_text_objects, arrowprops=dict(arrowstyle = '-', color = "#000000", linewidth = 3))
         
         image_buffer = BytesIO()
         fig.savefig(image_buffer, format = 'png', bbox_inches='tight', pad_inches = 0)
