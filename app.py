@@ -4,8 +4,6 @@ from tkinter import ttk
 import requests
 from io import BytesIO
 
-import threading
-
 from PIL import Image, ImageTk, ImageDraw
 
 import webcolors
@@ -59,7 +57,6 @@ class HASSEngine():
 
         #initial publish to stock
         self.client.publish("system-entities-request")
-        #threading.Event().wait(1)
 
  
     def __on_refresh(self, _client, userdata, msg):
