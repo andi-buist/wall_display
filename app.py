@@ -4,7 +4,7 @@ from tkinter import ttk
 import requests
 from io import BytesIO
 
-import threading
+import datetime
 
 from PIL import Image, ImageTk, ImageDraw
 
@@ -44,6 +44,41 @@ def entity_cache_read(entity_id: str, key: str, fallback):
     else:
         return fallback
 
+def localcache_write(filepath: str, id: str, timestamp: str, value: tuple, hr_limit: int = None):
+    with open(filepath) as json_data:
+        history = json.load(json_data)
+        json_data.close()
+    
+    earliest_date = datetime.datetime.now() - datetime.timedelta(hours = hr_limit)
+
+    if id in history.keys():
+        new_hist = history[id]
+        new_hist[timestamp] = value
+
+        #remove old keys
+        if hr_limit:
+            for key in new_hist.keys():
+                if datetime.datetime.strptime(key, "%Y-%m-%dT%H:%M:%S.%fZ") < earliest_date: del new_hist[key]
+    else:
+        new_hist = {timestamp: value}
+    
+    history[id] = new_hist
+    
+    with open(filepath, 'w') as file_write:
+            json.dump(history, file_write)
+            file_write.close()
+    
+def localcache_read(filepath: str, id: str):
+    with open(filepath) as json_data:
+        history = json.load(json_data)
+        json_data.close()
+
+    if id in history.keys():
+        return history[id]
+    else:
+        return {}
+
+
 with BytesIO(requests.get("https://xkcd.com/color/rgb.txt").content) as file:
     #remove 1st entry as this is the title, license, etc.
     xkcd_colours = dict([tuple(line.decode('utf-8').split("\t")[0:2]) for line in file][1:])
@@ -59,7 +94,6 @@ class HASSEngine():
 
         #initial publish to stock
         self.client.publish("system-entities-request")
-        #threading.Event().wait(1)
 
  
     def __on_refresh(self, _client, userdata, msg):
@@ -373,20 +407,22 @@ class EntityMapSnap(EntityWidget):
                         color = "#000000",
                         linewidth = 3,
                         zorder = 2)
-        
-        with open("./data/person_position_log.json") as json_data:
-            movement_history = json.load(json_data)
-            json_data.close()
 
         for entity in people:
             #get position history if present, else make, trim to most recent N and append current
-            position_history = movement_history[entity['entity_id']]
+            position_history = localcache_read("./data/person_position_log.json", entity['entity_id'])
             _current_position = [entity['attributes']['longitude'], entity['attributes']['latitude']]
 
-            if len(position_history) == 0 or _current_position != position_history[-1]:
-                position_history.append(_current_position)
-                position_history = position_history[-min(len(position_history), 100):] # trim
-                movement_history[entity['entity_id']] = position_history # assign back
+            if len(position_history) > 0:
+                _latest_parsed_datetime = max([datetime.datetime.strptime(x, "%Y-%m-%dT%H:%M:%S.%fZ") for x in position_history.keys()])
+                _latest_position = position_history[_latest_parsed_datetime.strftime("%Y-%m-%dT%H:%M:%S.%fZ")]
+
+            if len(position_history) == 0 or _current_position != _latest_position:
+                localcache_write("./data/person_position_log.json",
+                                 entity['entity_id'],
+                                 datetime.datetime.strptime(entity['last_updated'], "%Y-%m-%dT%H:%M:%S.%fZ").strftime("%Y-%m-%dT%H:%M:%S.%fZ"),
+                                 _current_position,
+                                 12) # assign back
             
             # point
             ax.plot(entity['attributes']['longitude'], 
@@ -417,8 +453,6 @@ class EntityMapSnap(EntityWidget):
                     color = "#444444",
                     linewidth = 2,
                     zorder = 1)
-        with open("./data/person_position_log.json", 'w') as file_write:
-            json.dump(movement_history, file_write)
         
         adjust_text(_text_objects, arrowprops=dict(arrowstyle = '-', color = "#000000", linewidth = 3, zorder = 2))
         
