@@ -1,4 +1,6 @@
 .venv/
+
 .archive/
-.secrets/
+.cache/
 .experiments/
+.secrets/

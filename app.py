@@ -6,19 +6,20 @@ from io import BytesIO
 
 import datetime
 
-from PIL import Image, ImageTk, ImageDraw
+from PIL import Image, ImageTk, ImageEnhance
 
 import webcolors
 
 import matplotlib
 matplotlib.use('agg') # permits starting matplotlib contexts in classes (EntityMapSnap)
 import matplotlib.pyplot as plt
-import matplotlib.image as pltimg
+import matplotlib.image as mpimg
 
 from adjustText import adjust_text
 
+import cartopy
+cartopy.config['cache_dir'] = "./.cache/cartopy/"
 from cartopy import crs as ccrs
-from cartopy import feature as cfeature
 from cartopy.io import img_tiles as ctiles
 
 import math
@@ -150,7 +151,9 @@ class EntityWidget(tk.Widget):
         #the widget to be instanced
         self.widget: tk.Misc = None
 
-        self.build()
+        #note: __init__ should not explicitly call build(). build() is coordinated 
+        # by the HASSEngine in what's called "lazy loading", 
+        # only making the resource once entity_dict is available
 
     def update_entity_dict(self):
         self.entity_dict = self.get_target_entities()
@@ -160,17 +163,34 @@ class EntityWidget(tk.Widget):
     #this should be called in all cases where self needs refresh but not necessarily everything does
     def build(self, **kwargs):
         """Rebuilds this widget without erasing its attributes! kwargs will happily pass to construct_widget()"""
-        for child in self.winfo_children():
-            child.destroy()
-        
-        if len(self.entity_dict) > 0:
-            if self.foreach:
-                for entity_id, entity in self.entity_dict.items():
-                    widget = self.construct_widget(entity_id, entity, **kwargs)
+        try:
+            for child in self.winfo_children():
+                child.destroy()
+            
+            if len(self.entity_dict) > 0:
+                if self.foreach:
+                    for entity_id, entity in self.entity_dict.items():
+                        widget = self.construct_widget(entity_id, entity, **kwargs)
+                        widget.pack()
+                else:
+                    widget = self.construct_widget(None, self.entity_dict, **kwargs)
                     widget.pack()
             else:
-                widget = self.construct_widget(None, self.entity_dict, **kwargs)
-                widget.pack()
+                ttk.Label(self, text="Loading...").pack()
+        except Exception as e:
+            #create and format debug image, add details to label, pack in place of broken widget
+            debug_image = Image.open("./theme/ui/img/ill_capy.png")
+            debug_image = debug_image.resize((300,300), resample= Image.Resampling.NEAREST)
+            debug_image = debug_image.convert('1')
+            debug_image = ImageTk.PhotoImage(debug_image)
+
+            debug_placeholder = ttk.Label(self, image=debug_image)
+            debug_placeholder.image = debug_image
+            debug_placeholder.pack()
+
+            debug_label = ttk.Label(self, text="Something went wrong...\nError Details: " + str(e) +"\nRaised by: " + str(self))
+            debug_label.pack()
+            
     
     def construct_widget(self, entity_id: str, entity: dict):
         return ttk.Label(self,
@@ -338,42 +358,55 @@ class EntityRGBSpinners(EntityWidget):
 class EntityMapSnap(EntityWidget):
     def __init__(self, engine: HASSEngine, master, client, entity_type: str | list[str] = None, entity_id: str | list[str] = None, **kwargs):
         EntityWidget.__init__(self, engine, master, "entity_slider", client, entity_type, entity_id, foreach = False, **kwargs)
-        self.focus = 0
+        self.person_focus = "all"
 
 
     def construct_widget(self, entity_id: str, entity_dict: dict, **kwargs):
         widget = ttk.Frame(self)
 
+        if self.kwargs.get('size') is not None:
+            self.mapsize = self.kwargs.get('size')
+        else: raise KeyError("kwarg 'size' expected for class EntityMapSnap")
+
+        self.zones = [entity for id, entity in entity_dict.items() if 'zone' in id]
+        self.people = [entity for id, entity in entity_dict.items() if 'person' in id]
+
         photo_image = self.generate_map(entity_id, entity_dict, **kwargs)
+
         map_widget = ttk.Label(widget, image = photo_image)
         map_widget.image = photo_image
         map_widget.grid(column=0, row=0, columnspan=2)
 
-        people_list = [x for x in entity_dict.keys() if 'person' in x]
-        people_list = [None] + people_list
-        toggle_button = ttk.Button(widget, command = lambda people_list = people_list: self.toggle_focus(people_list))
-        toggle_button.grid(column = 0, row = 1)
+        person_choice_list = ["all"] + [x for x in entity_dict.keys() if 'person' in x]
+        person_choice_list_names = ["All"] + [x['attributes']['friendly_name'] for k,x in entity_dict.items() if 'person' in k]
+
+        focus_button = ttk.Button(widget,
+                                   command = lambda attr = 'person_focus', options = person_choice_list: self.toggle_attr(attr, options),
+                                   text = "Focus: " + person_choice_list_names[person_choice_list.index(self.person_focus)])
+        focus_button.grid(column = 0, row = 1, sticky = 'nsew')
+
+        debug_button = ttk.Button(widget,
+                                  text = "This is a debug button that does nothing.")
+        debug_button.grid(column = 1, row = 1, sticky = 'nsew')
 
         return widget
     
     # get length of current people list, iterate through looping back to 0 at end, set as current focus
-    def toggle_focus(self, people_list):
-        self.focus = ((self.focus + 1) % (len(people_list)))
+    def toggle_attr(self, attr: str, options: list[str]):
+        new_option_index = (options.index(self.person_focus) + 1) % len(options)
+        setattr(self, attr, options[new_option_index])
         self.build()
     
     def generate_map(self, entity_id: str, entity_dict: dict, **kwargs):
-        zones = [entity for id, entity in entity_dict.items() if 'zone' in id]
-        people = [entity for id, entity in entity_dict.items() if 'person' in id]
+        zones = self.zones
+        people = self.people
+        _size = self.mapsize
 
-        # if current focus isn't 0, highlight that person on the map
-        if self.focus > 0:
-            people = [people[self.focus - 1]]
-
-        _size = self.kwargs.get('size')
-        if _size is None: raise KeyError("kwarg 'size' expected for class EntityMapSnap")
+        if self.person_focus != "all":
+            people = [entity for id, entity in entity_dict.items() if self.person_focus in id]
         
-        # extent calculation ----
-        _minimum_aspect = 0.001
+        """Calculating map extent"""
+        _minimum_aspect = 0.0015
 
         _lonlat_diff = (max([x['attributes']['longitude'] for x in people]) - min([x['attributes']['longitude'] for x in people]),
                         max([x['attributes']['latitude'] for x in people]) - min([x['attributes']['latitude'] for x in people]))
@@ -389,33 +422,23 @@ class EntityMapSnap(EntityWidget):
             _lonlat_centroid[1] + (_square_aspect_diff/2) + _lonlat_buffer,
             ]
         
+        #filter to ensure not rendering tile content out of bounds
+        zones = self.filter_entities_to_extent(zones, extent)
+        people = self.filter_entities_to_extent(people, extent)
+
         # map plot setup ----
         plt.rcParams['font.family'] = "Nintendo DS BIOS"
+        
+        """First plot cycle: used to fetch tiles, apply enhancements, save to image. Used as bg of second plot cycle"""
+        map_bg = self.get_map_image(_size, extent, _square_aspect_diff, _minimum_aspect, 96, 0.75)
+        """End of first plot cycle"""
 
-        crs = ccrs.PlateCarree()
-        tiles = ctiles.StadiaMapsTiles(apikey = "5d0de9f8-8302-49a6-811c-086d733500c4",
-                                       style = "stamen_watercolor")
-
-        fig, ax = plt.subplots(subplot_kw=dict(projection=crs), figsize = (8,8))
-        ax.set_extent(extent, crs = crs)
-
-        match math.floor(math.log2(_square_aspect_diff / _minimum_aspect)):
-            case 0: _zoom_level = 16
-            case 1: _zoom_level = 16
-            case 2: _zoom_level = 15
-            case 3: _zoom_level = 14
-            case 4: _zoom_level = 13
-            case 5: _zoom_level = 12
-            case 6: _zoom_level = 11
-            case 7: _zoom_level = 10
-            case 8: _zoom_level = 9
-            case 9: _zoom_level = 8
-            case 10: _zoom_level = 7
-            case 11: _zoom_level = 6
-            case 12: _zoom_level = 5 
-            case _: _zoom_level = 4
-
-        ax.add_image(tiles, _zoom_level)
+        """Second plot cycle"""
+        fig, ax = plt.subplots(figsize = (8,8))
+        plt.axis('off')
+        ax.set_xlim(extent[0], extent[1])
+        ax.set_ylim(extent[2], extent[3])
+        ax.imshow(map_bg, extent = extent)
 
         _text_objects = []
         for entity in zones:
@@ -489,7 +512,8 @@ class EntityMapSnap(EntityWidget):
             # position history
             ax.plot(*zip(*position_history.values()),
                     color = "#444444",
-                    linewidth = 2,
+                    linewidth = 3,
+                    linestyle = 'dotted',
                     zorder = 1)
         adjust_text(_text_objects, arrowprops=dict(arrowstyle = '-', color = "#000000", linewidth = 3, zorder = 2))
 
@@ -504,6 +528,54 @@ class EntityMapSnap(EntityWidget):
         photo_image = ImageTk.PhotoImage(image)
 
         return photo_image
+    
+    def get_map_image(self, size: int, extent: list, aspect: float, min_aspect: float, brightness: float, contrast: float):
+        match math.floor(math.log2(aspect / min_aspect)):
+            case 0: _zoom_level = 17
+            case 1: _zoom_level = 16
+            case 2: _zoom_level = 15
+            case 3: _zoom_level = 14
+            case 4: _zoom_level = 13
+            case 5: _zoom_level = 12
+            case 6: _zoom_level = 11
+            case 7: _zoom_level = 10
+            case 8: _zoom_level = 9
+            case 9: _zoom_level = 8
+            case 10: _zoom_level = 7
+            case 11: _zoom_level = 6
+            case 12: _zoom_level = 5 
+            case _: _zoom_level = 4
+
+        crs = ccrs.PlateCarree()
+        tiles = ctiles.StadiaMapsTiles(apikey = "5d0de9f8-8302-49a6-811c-086d733500c4",
+                                       style = "stamen_toner_background",
+                                       cache = True)
+
+        fig, ax = plt.subplots(figsize = (8,8), subplot_kw=dict(projection=crs))
+        ax.set_xlim(extent[0], extent[1])
+        ax.set_ylim(extent[2], extent[3])
+        ax.set_extent(extent, crs = crs)
+
+        ax.add_image(tiles, _zoom_level)
+
+        #create a file buffer object, save map view
+        buffer = BytesIO()
+        fig.savefig(buffer, format = 'png', bbox_inches='tight', pad_inches = 0)
+        plt.close()
+
+        #open as image, resize
+        map_bg = Image.open(buffer)
+        map_bg = map_bg.resize((size, size), resample= Image.Resampling.NEAREST)
+
+        #pull up brightness by mapping [0,255] -> [n,255]
+        return ImageEnhance.Contrast(Image.merge(map_bg.mode, [x.point(lambda i: i + ((1 - (i/255)) * brightness)) for x in map_bg.split()])).enhance(contrast)
+
+    def filter_entities_to_extent(self, entity_list: list[dict], extent: list):
+        return [x for x in entity_list if 
+         x['attributes']['longitude'] >= extent[0] and 
+         x['attributes']['longitude'] <= extent[1] and
+         x['attributes']['latitude'] >= extent[2] and 
+         x['attributes']['latitude'] <= extent[3]]
 
 """
 App Definition
