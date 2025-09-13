@@ -13,6 +13,7 @@ import webcolors
 import matplotlib
 matplotlib.use('agg') # permits starting matplotlib contexts in classes (EntityMapSnap)
 import matplotlib.pyplot as plt
+import matplotlib.image as pltimg
 
 from adjustText import adjust_text
 
@@ -44,7 +45,7 @@ def entity_cache_read(entity_id: str, key: str, fallback):
     else:
         return fallback
 
-def localcache_write(filepath: str, id: str, timestamp: str, value: tuple, hr_limit: int = None):
+def localcache_write(filepath: str, id: str, timestamp: datetime.datetime, value: tuple, hr_limit: int = None):
     with open(filepath) as json_data:
         history = json.load(json_data)
         json_data.close()
@@ -78,7 +79,6 @@ def localcache_read(filepath: str, id: str):
     else:
         return {}
 
-
 with BytesIO(requests.get("https://xkcd.com/color/rgb.txt").content) as file:
     #remove 1st entry as this is the title, license, etc.
     xkcd_colours = dict([tuple(line.decode('utf-8').split("\t")[0:2]) for line in file][1:])
@@ -95,16 +95,22 @@ class HASSEngine():
         #initial publish to stock
         self.client.publish("system-entities-request")
 
- 
+    #refresh which updates latest_msg and then calls refresh, triggered by subscription messages
     def __on_refresh(self, _client, userdata, msg):
         """Generic function to destroy and repack"""
         #get incoming json msg.payload
         msg_json = json.loads(msg.payload)
-
+        self.latest_msg = msg_json
+        self.refresh()
+    
+    #refresh
+    #note: probably never needs calling directly? try widget's build() first...
+    def refresh(self):
         #erase existing children
         for child in self.get_all_children(self.window):
             if isinstance(child, EntityWidget):
-                child.latest_msg = msg_json
+                #cascade latest message to children
+                child.latest_msg = self.latest_msg
                 child.update_entity_dict()
                 child.build()
         
@@ -119,7 +125,7 @@ class HASSEngine():
         return finList
 
 class EntityWidget(tk.Widget):
-    def __init__(self, master, widget_name, client: mqtt.Client, entity_type: str | list[str] = None, entity_id: str | list[str] = None, foreach: bool = True, **kwargs):
+    def __init__(self, engine: HASSEngine, master, widget_name, client: mqtt.Client, entity_type: str | list[str] = None, entity_id: str | list[str] = None, foreach: bool = True, **kwargs):
         ttk.Frame.__init__(self, master)
         #pass alongs
         self.kwargs = kwargs
@@ -127,6 +133,9 @@ class EntityWidget(tk.Widget):
 
         #the mqtt client
         self.client = client
+
+        #the engine
+        self.engine = engine
 
         #the latest message set by HASSEngine
         self.latest_msg = None
@@ -146,17 +155,21 @@ class EntityWidget(tk.Widget):
     def update_entity_dict(self):
         self.entity_dict = self.get_target_entities()
     
-    def build(self):
+    #creates the object described in construct widget, assigns it to attr in self, then packs
+    #will destroy stale widgets and instance new ones based on data in self
+    #this should be called in all cases where self needs refresh but not necessarily everything does
+    def build(self, **kwargs):
+        """Rebuilds this widget without erasing its attributes! kwargs will happily pass to construct_widget()"""
         for child in self.winfo_children():
             child.destroy()
         
         if len(self.entity_dict) > 0:
             if self.foreach:
                 for entity_id, entity in self.entity_dict.items():
-                    widget = self.construct_widget(entity_id, entity)
+                    widget = self.construct_widget(entity_id, entity, **kwargs)
                     widget.pack()
             else:
-                widget = self.construct_widget(None, self.entity_dict)
+                widget = self.construct_widget(None, self.entity_dict, **kwargs)
                 widget.pack()
     
     def construct_widget(self, entity_id: str, entity: dict):
@@ -177,8 +190,8 @@ class EntityWidget(tk.Widget):
         return msg_json
 
 class EntityButton(EntityWidget):
-    def __init__(self, master, client, entity_type: str | list[str] = None, entity_id: str | list[str] = None, **kwargs):
-        EntityWidget.__init__(self, master, "entity_button", client, entity_type, entity_id, **kwargs)
+    def __init__(self, engine: HASSEngine, master, client, entity_type: str | list[str] = None, entity_id: str | list[str] = None, **kwargs):
+        EntityWidget.__init__(self, engine, master, "entity_button", client, entity_type, entity_id, **kwargs)
     
     def construct_widget(self, entity_id: str, entity: dict):
         return ttk.Button(self,
@@ -198,8 +211,8 @@ class EntityButton(EntityWidget):
         self.client.publish("lights",json.dumps(msg_dict))
 
 class EntitySlider(EntityWidget):
-    def __init__(self, master, client, entity_type: str | list[str] = None, entity_id: str | list[str] = None, **kwargs):
-        EntityWidget.__init__(self, master, "entity_slider", client, entity_type, entity_id, **kwargs)
+    def __init__(self, engine: HASSEngine, master, client, entity_type: str | list[str] = None, entity_id: str | list[str] = None, **kwargs):
+        EntityWidget.__init__(self, engine, master, "entity_slider", client, entity_type, entity_id, **kwargs)
     
     def construct_widget(self, entity_id: str, entity: dict):
         slider = ttk.Scale(self,
@@ -231,8 +244,8 @@ class EntitySlider(EntityWidget):
         self.client.publish("lights",json.dumps(msg_dict))
 
 class EntityRGBSpinners(EntityWidget):
-    def __init__(self, master, client, entity_type: str | list[str] = None, entity_id: str | list[str] = None, **kwargs):
-        EntityWidget.__init__(self, master, "entity_slider", client, entity_type, entity_id, **kwargs)
+    def __init__(self, engine: HASSEngine, master, client, entity_type: str | list[str] = None, entity_id: str | list[str] = None, **kwargs):
+        EntityWidget.__init__(self, engine, master, "entity_slider", client, entity_type, entity_id, **kwargs)
 
     def construct_widget(self, entity_id: str, entity: dict):
         if entity['state'] == "on":
@@ -323,18 +336,44 @@ class EntityRGBSpinners(EntityWidget):
         return min(distances, key=distances.get)
 
 class EntityMapSnap(EntityWidget):
-    def __init__(self, master, client, entity_type: str | list[str] = None, entity_id: str | list[str] = None, **kwargs):
-        EntityWidget.__init__(self, master, "entity_slider", client, entity_type, entity_id, foreach = False, **kwargs)
+    def __init__(self, engine: HASSEngine, master, client, entity_type: str | list[str] = None, entity_id: str | list[str] = None, **kwargs):
+        EntityWidget.__init__(self, engine, master, "entity_slider", client, entity_type, entity_id, foreach = False, **kwargs)
+        self.focus = 0
 
-    def construct_widget(self, entity_id: str, entity_dict: dict):
+
+    def construct_widget(self, entity_id: str, entity_dict: dict, **kwargs):
+        widget = ttk.Frame(self)
+
+        photo_image = self.generate_map(entity_id, entity_dict, **kwargs)
+        map_widget = ttk.Label(widget, image = photo_image)
+        map_widget.image = photo_image
+        map_widget.grid(column=0, row=0, columnspan=2)
+
+        people_list = [x for x in entity_dict.keys() if 'person' in x]
+        people_list = [None] + people_list
+        toggle_button = ttk.Button(widget, command = lambda people_list = people_list: self.toggle_focus(people_list))
+        toggle_button.grid(column = 0, row = 1)
+
+        return widget
+    
+    # get length of current people list, iterate through looping back to 0 at end, set as current focus
+    def toggle_focus(self, people_list):
+        self.focus = ((self.focus + 1) % (len(people_list)))
+        self.build()
+    
+    def generate_map(self, entity_id: str, entity_dict: dict, **kwargs):
         zones = [entity for id, entity in entity_dict.items() if 'zone' in id]
         people = [entity for id, entity in entity_dict.items() if 'person' in id]
+
+        # if current focus isn't 0, highlight that person on the map
+        if self.focus > 0:
+            people = [people[self.focus - 1]]
 
         _size = self.kwargs.get('size')
         if _size is None: raise KeyError("kwarg 'size' expected for class EntityMapSnap")
         
         # extent calculation ----
-        _minimum_aspect = 0.0015
+        _minimum_aspect = 0.001
 
         _lonlat_diff = (max([x['attributes']['longitude'] for x in people]) - min([x['attributes']['longitude'] for x in people]),
                         max([x['attributes']['latitude'] for x in people]) - min([x['attributes']['latitude'] for x in people]))
@@ -359,7 +398,6 @@ class EntityMapSnap(EntityWidget):
 
         fig, ax = plt.subplots(subplot_kw=dict(projection=crs), figsize = (8,8))
         ax.set_extent(extent, crs = crs)
-
 
         match math.floor(math.log2(_square_aspect_diff / _minimum_aspect)):
             case 0: _zoom_level = 16
@@ -396,7 +434,7 @@ class EntityMapSnap(EntityWidget):
                         entity['attributes']['longitude'],
                         entity['attributes']['latitude'] - _lonlat_buffer, # little spacing to hover below point
                         entity['attributes']['friendly_name'],
-                        fontsize = 20,
+                        fontsize = 24,
                         color = "#ffffff",
                         horizontalalignment = 'center',
                         bbox = dict(facecolor = "#000000", edgecolor = "#000000", linewidth = 1.5),
@@ -438,7 +476,7 @@ class EntityMapSnap(EntityWidget):
                     entity['attributes']['longitude'],
                     entity['attributes']['latitude'] + _lonlat_buffer, # little spacing to hover above point
                     entity['attributes']['friendly_name'],
-                    fontsize = 20,
+                    fontsize = 24,
                     horizontalalignment = 'center',
                     bbox = dict(facecolor = "#ffffff", edgecolor = "#000000", linewidth = 1.5),
                     zorder = 4))
@@ -449,24 +487,23 @@ class EntityMapSnap(EntityWidget):
                     linewidth = 3,
                     zorder = 2)
             # position history
-            ax.plot(*zip(*position_history),
+            ax.plot(*zip(*position_history.values()),
                     color = "#444444",
                     linewidth = 2,
                     zorder = 1)
-        
         adjust_text(_text_objects, arrowprops=dict(arrowstyle = '-', color = "#000000", linewidth = 3, zorder = 2))
-        
+
         image_buffer = BytesIO()
         fig.savefig(image_buffer, format = 'png', bbox_inches='tight', pad_inches = 0)
+        plt.close()
+
         image = Image.open(image_buffer)
         image = image.resize((_size, _size), resample= Image.Resampling.NEAREST)
         image = image.convert('1')
 
         photo_image = ImageTk.PhotoImage(image)
 
-        widget = ttk.Label(self, image = photo_image)
-        widget.image = photo_image
-        return widget
+        return photo_image
 
 """
 App Definition
@@ -502,16 +539,16 @@ notebook.tab(1, text = "Map")
 notebook.pack(side = tk.RIGHT,
               fill = 'y')
 
-light_switches = EntityButton(light_menu, client, 'light')
+light_switches = EntityButton(h, light_menu, client, 'light')
 light_switches.grid(row = 0, columnspan = 2)
 
-light_sliders = EntitySlider(light_menu, client, entity_id = 'light.desk_light', orient = 'vertical')
+light_sliders = EntitySlider(h, light_menu, client, entity_id = 'light.desk_light', orient = 'vertical')
 light_sliders.grid(column = 0, row = 1, ipadx = 10)
 
-light_rgb = EntityRGBSpinners(light_menu, client, entity_id = 'light.desk_light')
+light_rgb = EntityRGBSpinners(h, light_menu, client, entity_id = 'light.desk_light')
 light_rgb.grid(column = 1, row = 1)
 
-map = EntityMapSnap(map_menu, client, ['person', 'zone'], size = 480)
-map.pack()
+map_snap = EntityMapSnap(h, map_menu, client, ['person', 'zone'], size = 400)
+map_snap.pack()
 
 window.mainloop()
