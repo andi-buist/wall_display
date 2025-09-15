@@ -3,6 +3,7 @@ from tkinter import ttk
 from PIL import Image, ImageTk
 import paho.mqtt.client as mqtt
 import traceback
+import queue
 
 class EntityWidget(tk.Widget):
     def __init__(self, master, widget_name, client: mqtt.Client, entity_type: str | list[str] = None, entity_id: str | list[str] = None, foreach: bool = True, **kwargs):
@@ -13,6 +14,10 @@ class EntityWidget(tk.Widget):
 
         #the mqtt client
         self.client = client
+
+        #internal messaging system
+        self.widget_virtual_event = '<<widget-virtual-event>>'
+        self.bind(self.widget_virtual_event, self.on_virtual_event)
 
         #the latest message set by HASSEngine
         self.latest_msg = None
@@ -41,7 +46,6 @@ class EntityWidget(tk.Widget):
     #will destroy stale widgets and instance new ones based on data in self
     #this should be called in all cases where self needs refresh but not necessarily everything does
     def build(self, **kwargs):
-        print(self)
         """Rebuilds this widget without erasing its attributes! kwargs will happily pass to construct_widget()"""
         try:
             for child in self.winfo_children():
@@ -89,3 +93,6 @@ class EntityWidget(tk.Widget):
         msg_json = dict(zip([x['entity_id'] for x in msg_json], msg_json))
 
         return msg_json
+    
+    def on_virtual_event(self, data):
+        print(data)

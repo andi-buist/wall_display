@@ -95,7 +95,6 @@ class EntityBlueprint(EntityWidget):
                 current_body['selected'] = "yes"
             else:
                 current_body['selected'] = "no"
-        
-
+        self.event_generate(self.widget_virtual_event)
 
         self.build()

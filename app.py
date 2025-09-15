@@ -9,14 +9,18 @@ from modules.entity_widgets.entity_mapsnap import *
 from modules.entity_widgets.entity_rgb_spinner import *
 from modules.entity_widgets.entity_slider import *
 from modules.entity_widgets.entity_blueprint import *
-from modules.hass_engine import *
+from modules.mqtt_window import *
 
 global_font = ('Nintendo DS BIOS',12)
 
 """
 App Definition
 """
-window = tk.Tk()
+client = mqtt.Client(mqtt.CallbackAPIVersion.VERSION2)
+client.connect("192.168.0.180")
+client.subscribe("system-entities")
+
+window = MQTTWindow(client = client)
 window.title("Example")
 window.geometry("800x480")
 
@@ -26,12 +30,6 @@ style.theme_use('default')
 
 #configure style
 style.configure('.',  font = global_font)
-
-client = mqtt.Client(mqtt.CallbackAPIVersion.VERSION2)
-client.connect("192.168.0.180")
-client.subscribe("system-entities")
-
-h = HASSEngine(client, window)
 
 notebook = ttk.Notebook(window)
 
