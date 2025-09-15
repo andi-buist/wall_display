@@ -93,14 +93,10 @@ blueprint_f1.add_body("lounge", lounge_poly, print_out)
 for k,v in lounge_decor.items(): blueprint_f1.add_body(k, v, type = 'decor')
 blueprint_f1.add_body("kitchen", kitchen_poly, print_out)
 for k,v in kitchen_decor.items(): blueprint_f1.add_body(k, v, type = 'decor')
-blueprint_f1.grid()
+blueprint_f1.grid(row = 0)
 
-# TODO: Investigate whether parentage allows for us to pass variables down from e.g. blueprint -> light switches? Good test case: new light switch parent of blueprint, check if children in room, else set child active = False
-# if no pleasant way to do this, another route could be doing wo_getinfo on master? Or maybe a separate context field so blueprint can be however many layers deep, and then fetch children of context?
-
-## doesn't work
-#test_switch = EntityButton(blueprint_f1, client, light_switch, entity_id = 'light.desk_light')
-#test_switch.pack()
+test_switch = EntityButton(blueprint_menu, client, light_switch, entity_id = 'light.desk_light', state_channel="lounge", initial_state = False)
+test_switch.grid(row = 1)
 
 light_switches = EntityButton(light_menu, client, light_switch, 'light')
 light_switches.grid(row = 0, columnspan = 2)

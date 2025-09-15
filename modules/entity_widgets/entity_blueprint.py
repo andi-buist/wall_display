@@ -1,17 +1,7 @@
 import tkinter as tk
-from tkinter import ttk
-from io import BytesIO
-import datetime
-from PIL import Image, ImageDraw, ImageOps, ImageTk, ImageEnhance
-import matplotlib
-import matplotlib.pyplot as plt
-from matplotlib.offsetbox import OffsetImage, AnnotationBbox
-from adjustText import adjust_text
-import cartopy
-from cartopy import crs as ccrs
-from cartopy.io import img_tiles as ctiles
-import math
+from PIL import Image, ImageDraw, ImageTk
 from typing import Literal
+import pubsub
 
 from config import *
 from .core import *
@@ -20,9 +10,17 @@ from ..caching import *
 from .core import *
 
 class EntityBlueprint(EntityWidget):
-    def __init__(self, master, client, entity_type: str | list[str] = None, entity_id: str | list[str] = None, **kwargs):
-        EntityWidget.__init__(self, master, "entity_blueprint", client, entity_type, entity_id, foreach = False, **kwargs)
+    def __init__(self, master, client, 
+                 entity_type: str | list[str] = None, entity_id: str | list[str] = None,
+                 state_channel: str | list[str] = [],
+                 **kwargs):
+        EntityWidget.__init__(self=self, master=master, widget_name="entity_blueprint", client=client, 
+                              entity_type=entity_type, entity_id=entity_id,  
+                              state_channel = state_channel, 
+                              foreach = False,
+                              **kwargs)
         self.body_dict = {}
+
         
     def construct_widget(self, entity_id: str, entity: dict):
         #find the max x,y
@@ -93,8 +91,9 @@ class EntityBlueprint(EntityWidget):
         for _id, current_body in self.body_dict.items():
             if _id == id and current_body['selected'] == "no":
                 current_body['selected'] = "yes"
+                pub.sendMessage(_id, **dict(state = True))
             else:
                 current_body['selected'] = "no"
-        self.event_generate(self.widget_virtual_event)
+                pub.sendMessage(_id, **dict(state = False))
 
         self.build()

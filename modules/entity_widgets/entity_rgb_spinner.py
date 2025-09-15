@@ -15,8 +15,14 @@ with BytesIO(requests.get("https://xkcd.com/color/rgb.txt").content) as file:
     xkcd_colours = dict([tuple(line.decode('utf-8').split("\t")[0:2]) for line in file][1:])
 
 class EntityRGBSpinners(EntityWidget):
-    def __init__(self, master, client, entity_type: str | list[str] = None, entity_id: str | list[str] = None, **kwargs):
-        EntityWidget.__init__(self, master, "entity_slider", client, entity_type, entity_id, **kwargs)
+    def __init__(self, master, client, 
+                 entity_type: str | list[str] = None, entity_id: str | list[str] = None, 
+                 state_channel: str | list[str] = [],
+                 **kwargs):
+        EntityWidget.__init__(self=self, master=master, widget_name="entity_slider", client=client, 
+                              entity_type=entity_type, entity_id=entity_id, 
+                              state_channel=state_channel,
+                              **kwargs)
 
     def construct_widget(self, entity_id: str, entity: dict):
         if entity['state'] == "on":

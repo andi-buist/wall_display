@@ -3,10 +3,14 @@ from tkinter import ttk
 from PIL import Image, ImageTk
 import paho.mqtt.client as mqtt
 import traceback
-import queue
+from pubsub import *
 
 class EntityWidget(tk.Widget):
-    def __init__(self, master, widget_name, client: mqtt.Client, entity_type: str | list[str] = None, entity_id: str | list[str] = None, foreach: bool = True, **kwargs):
+    def __init__(self, master, widget_name, client: mqtt.Client,
+                 entity_type: str | list[str] = None, entity_id: str | list[str] = None, 
+                 initial_state: bool = True,
+                 foreach: bool = True, state_channel: str | list[str] = [],
+                 **kwargs):
         ttk.Frame.__init__(self, master)
         #pass alongs
         self.kwargs = kwargs
@@ -15,17 +19,18 @@ class EntityWidget(tk.Widget):
         #the mqtt client
         self.client = client
 
-        #internal messaging system
-        self.widget_virtual_event = '<<widget-virtual-event>>'
-        self.bind(self.widget_virtual_event, self.on_virtual_event)
+        #pubsub messaging system - state
+        if not isinstance(state_channel, list):
+            state_channel = [state_channel]
+        for channel in state_channel:
+            print(channel)
+            pub.subscribe(self.state_listener, channel)
 
-        #the latest message set by HASSEngine
+        #the latest message set by MQTTWindow
         self.latest_msg = None
-
         #the initial entity types and ids
         self.entity_type = entity_type
         self.entity_id = entity_id
-
         #the up-to-date entity dictionary
         self.entity_dict = {}
 
@@ -33,7 +38,7 @@ class EntityWidget(tk.Widget):
         self.widget: tk.Misc = None
 
         #is the widget visible?
-        self.visible: bool = True
+        self.state: bool = initial_state
 
         #note: __init__ should not explicitly call build(). build() is coordinated 
         # by the HASSEngine in what's called "lazy loading", 
@@ -52,7 +57,7 @@ class EntityWidget(tk.Widget):
                 child.destroy()
             
             if len(self.entity_dict) > 0:
-                if self.visible:
+                if self.state:
                     if self.foreach:
                         for entity_id, entity in self.entity_dict.items():
                             widget = self.construct_widget(entity_id, entity, **kwargs)
@@ -94,5 +99,7 @@ class EntityWidget(tk.Widget):
 
         return msg_json
     
-    def on_virtual_event(self, data):
-        print(data)
+    #will set the state of the EntityWidget to the 'state' value of the incoming message, then rebuild
+    def state_listener(self, state: bool):
+        self.state = state
+        self.build()
