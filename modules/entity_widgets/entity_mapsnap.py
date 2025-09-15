@@ -103,12 +103,11 @@ class EntityMapSnap(EntityWidget):
         # map plot setup ----
         plt.rcParams['font.family'] = "Nintendo DS BIOS"
         
-        """First plot cycle: used to fetch tiles, apply enhancements, save to image. Used as bg of second plot cycle"""
+        """---First plot cycle: used to fetch tiles, apply enhancements, save to image. Used as bg of second plot cycle---"""
         map_bg = self.get_map_image(_size, extent, map_dimension, _minimum_aspect, 96, 0.75)
-        """End of first plot cycle"""
+        """---End of first plot cycle---"""
 
-        # TODO: Maybe add astro back? Now we have toggle, it wouldn't be so crowded. Button for overlays!!! COOL
-        """Second plot cycle"""
+        """---Second plot cycle---"""
         fig, ax = plt.subplots(figsize = (8,8))
         plt.axis('off')
         ax.set_xlim(extent[0], extent[1])
@@ -126,6 +125,7 @@ class EntityMapSnap(EntityWidget):
                 self.plt_add_astronomy(fig, ax, lonlat_centroid, extent, map_dimension + map_buffer)
     
         adjust_text(label_store, arrowprops=dict(arrowstyle = '-', color = "#000000", linewidth = 3, zorder = 2))
+        """---End of second plot cycle---"""
 
         image_buffer = BytesIO()
         fig.savefig(image_buffer, format = 'png', bbox_inches='tight', pad_inches = 0)

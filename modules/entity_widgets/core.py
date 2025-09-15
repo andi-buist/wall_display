@@ -27,6 +27,9 @@ class EntityWidget(tk.Widget):
         #the widget to be instanced
         self.widget: tk.Misc = None
 
+        #is the widget visible?
+        self.visible: bool = True
+
         #note: __init__ should not explicitly call build(). build() is coordinated 
         # by the HASSEngine in what's called "lazy loading", 
         # only making the resource once entity_dict is available
@@ -38,19 +41,21 @@ class EntityWidget(tk.Widget):
     #will destroy stale widgets and instance new ones based on data in self
     #this should be called in all cases where self needs refresh but not necessarily everything does
     def build(self, **kwargs):
+        print(self)
         """Rebuilds this widget without erasing its attributes! kwargs will happily pass to construct_widget()"""
         try:
             for child in self.winfo_children():
                 child.destroy()
             
             if len(self.entity_dict) > 0:
-                if self.foreach:
-                    for entity_id, entity in self.entity_dict.items():
-                        widget = self.construct_widget(entity_id, entity, **kwargs)
+                if self.visible:
+                    if self.foreach:
+                        for entity_id, entity in self.entity_dict.items():
+                            widget = self.construct_widget(entity_id, entity, **kwargs)
+                            widget.pack()
+                    else:
+                        widget = self.construct_widget(None, self.entity_dict, **kwargs)
                         widget.pack()
-                else:
-                    widget = self.construct_widget(None, self.entity_dict, **kwargs)
-                    widget.pack()
             else:
                 ttk.Label(self, text="Loading...").pack()
         except Exception as e:
