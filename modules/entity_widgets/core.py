@@ -6,7 +6,7 @@ import traceback
 from pubsub import *
 
 class EntityWidget(tk.Widget):
-    def __init__(self, master, widget_name, client: mqtt.Client,
+    def __init__(self, master, widget_name,
                  entity_type: str | list[str] = None, entity_id: str | list[str] = None, 
                  initial_state: bool = True,
                  foreach: bool = True, state_channel: str | list[str] = [],
@@ -16,9 +16,6 @@ class EntityWidget(tk.Widget):
         self.kwargs = kwargs
         self.foreach = foreach
 
-        #the mqtt client
-        self.client = client
-
         #pubsub messaging system - state
         if not isinstance(state_channel, list):
             state_channel = [state_channel]
@@ -26,12 +23,11 @@ class EntityWidget(tk.Widget):
             print(channel)
             pub.subscribe(self.state_listener, channel)
 
-        #the latest message set by MQTTWindow
-        self.latest_msg = None
         #the initial entity types and ids
         self.entity_type = entity_type
         self.entity_id = entity_id
         #the up-to-date entity dictionary
+        self.entity_dict_full = {}
         self.entity_dict = {}
 
         #the widget to be instanced
@@ -43,9 +39,31 @@ class EntityWidget(tk.Widget):
         #note: __init__ should not explicitly call build(). build() is coordinated 
         # by the HASSEngine in what's called "lazy loading", 
         # only making the resource once entity_dict is available
+    def entity_dict_handler(self, message:dict):
+        self.entity_dict_full = {x['entity_id']: x for x in message}
 
-    def update_entity_dict(self):
-        self.entity_dict = self.get_target_entities()
+        if self.entity_type is not None or self.entity_id is not None:
+            filtered_messages = []
+            for msg in self.entity_dict_full.values():
+                prefix = msg['entity_id'].split(".")[0]
+                if (self.entity_type is not None and prefix in self.entity_type) or (self.entity_id is not None and msg['entity_id'] in self.entity_id):
+                    filtered_messages.append(msg)
+
+            for msg in filtered_messages:
+                self.entity_dict[msg['entity_id']] = msg
+        else:
+            self.entity_dict = self.entity_dict_full
+
+        #if filtered_messages or (self.entity_type is None and self.entity_id is None):
+        self.build()
+    
+    def state_change_handler(self, message: dict):
+        if self.entity_type is not None and message['entity_id'].split(".")[0] in self.entity_type:
+            self.entity_dict[message['entity_id']] = message
+            self.build()
+        elif self.entity_id is not None and message['entity_id'] in self.entity_id:
+            self.entity_dict[message['entity_id']] = message
+            self.build()
     
     #creates the object described in construct widget, assigns it to attr in self, then packs
     #will destroy stale widgets and instance new ones based on data in self
@@ -69,7 +87,7 @@ class EntityWidget(tk.Widget):
                 ttk.Label(self, text="Loading...").pack()
         except Exception as e:
             #create and format debug image, add details to label, pack in place of broken widget
-            debug_image = Image.open("./theme/ui/img/ill_capy.png")
+            debug_image = Image.open("./theme/ui/img/broken_widget.png")
             debug_image = debug_image.resize((300,300), resample= Image.Resampling.NEAREST)
             debug_image = debug_image.convert('1')
             debug_image = ImageTk.PhotoImage(debug_image)
@@ -80,24 +98,10 @@ class EntityWidget(tk.Widget):
 
             debug_label = ttk.Label(self, text="Something went wrong...\nError Details: " + traceback.format_exc() +"\nRaised by: " + str(self))
             debug_label.pack()
-            
     
     def construct_widget(self, entity_id: str, entity: dict):
         return ttk.Label(self,
                          text = entity['attributes']['friendly_name'])
-
-    def get_target_entities(self):
-        msg_json = self.latest_msg
-
-        #create sub-array from all the desired items in payload
-        if self.entity_type is not None:
-            msg_json = [i for i in msg_json if i['entity_id'].split(".")[0] in self.entity_type]
-        if self.entity_id is not None:
-            msg_json = [i for i in msg_json if i['entity_id'] in self.entity_id]
-        
-        msg_json = dict(zip([x['entity_id'] for x in msg_json], msg_json))
-
-        return msg_json
     
     #will set the state of the EntityWidget to the 'state' value of the incoming message, then rebuild
     def state_listener(self, state: bool):

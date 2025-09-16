@@ -1,7 +1,6 @@
 import tkinter as tk
 from PIL import Image, ImageDraw, ImageTk
 from typing import Literal
-import pubsub
 
 from config import *
 from .core import *
@@ -10,11 +9,11 @@ from ..caching import *
 from .core import *
 
 class EntityBlueprint(EntityWidget):
-    def __init__(self, master, client, 
+    def __init__(self, master, 
                  entity_type: str | list[str] = None, entity_id: str | list[str] = None,
                  state_channel: str | list[str] = [],
                  **kwargs):
-        EntityWidget.__init__(self=self, master=master, widget_name="entity_blueprint", client=client, 
+        EntityWidget.__init__(self=self, master=master, widget_name="entity_blueprint",
                               entity_type=entity_type, entity_id=entity_id,  
                               state_channel = state_channel, 
                               foreach = False,
@@ -91,9 +90,9 @@ class EntityBlueprint(EntityWidget):
         for _id, current_body in self.body_dict.items():
             if _id == id and current_body['selected'] == "no":
                 current_body['selected'] = "yes"
-                pub.sendMessage(_id, **dict(state = True))
+                #pub.sendMessage(_id, **dict(state = True))
             else:
                 current_body['selected'] = "no"
-                pub.sendMessage(_id, **dict(state = False))
+                #pub.sendMessage(_id, **dict(state = False))
 
         self.build()

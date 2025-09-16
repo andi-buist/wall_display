@@ -1,15 +1,17 @@
 from .core import *
 from ..caching import *
+from ..websocket_defs import ThreadedWebsocket
 
 class EntitySlider(EntityWidget):
-    def __init__(self, master, client, 
+    def __init__(self, master, local_ws: ThreadedWebsocket,
                  entity_type: str | list[str] = None, entity_id: str | list[str] = None, 
                  state_channel: str | list[str] = [],
                  **kwargs):
-        EntityWidget.__init__(self=self, master=master, widget_name="entity_slider", client=client, 
+        EntityWidget.__init__(self=self, master=master, widget_name="entity_slider",
                               entity_type=entity_type, entity_id=entity_id, 
                               state_channel=state_channel,
                               **kwargs)
+        self.local_ws = local_ws
     
     def construct_widget(self, entity_id: str, entity: dict):
         slider = ttk.Scale(self,
@@ -30,12 +32,15 @@ class EntitySlider(EntityWidget):
 
     def interactive_function(self, event, entity_id):
         """The function used by default when the element created by make_interactive() is called."""
-
-        action = 'light.turn_on'
         value = int(event.widget.get())
 
         #if entity in cache, overwrite value, else make entity dict
         entity_cache_write(entity_id, 'value', value)
 
-        msg_dict = {'action': action, 'entity_id': entity_id, 'data': {'brightness': value}}
-        self.client.publish("lights",json.dumps(msg_dict))
+        msg_template = dict(type = "call_service",
+                            domain = "light",
+                            service = "turn_on",
+                            service_data = dict(brightness = value),
+                            target = dict(entity_id = entity_id))
+
+        self.local_ws.send(msg_template)

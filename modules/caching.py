@@ -1,5 +1,6 @@
 import json
 import datetime
+import dateutil
 
 global global_entity_cache
 global_entity_cache = {}
@@ -19,7 +20,7 @@ def entity_cache_read(entity_id: str, key: str, fallback):
     else:
         return fallback
 
-def localcache_write(filepath: str, id: str, timestamp: datetime.datetime, value: any, hr_limit: int = None):
+def localcache_write(filepath: str, id: str, timestamp: float, value: any, hr_limit: int = None):
     with open(filepath) as json_data:
         history = json.load(json_data)
         json_data.close()
@@ -34,7 +35,7 @@ def localcache_write(filepath: str, id: str, timestamp: datetime.datetime, value
         if hr_limit:
             to_del = []
             for key in new_hist.keys():
-                if datetime.datetime.strptime(key, "%Y-%m-%dT%H:%M:%S.%fZ") < earliest_date: to_del.append(key)
+                if float(key) < earliest_date.timestamp(): to_del.append(key)
             
             for key in to_del:
                 new_hist.pop(key)

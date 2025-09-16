@@ -1,26 +1,44 @@
+from websocket import *
 import tkinter as tk
 from tkinter import ttk
-from PIL import Image, ImageTk, ImageEnhance
-import paho.mqtt.client as mqtt
 
+from modules.hass_app import *
 from modules.caching import *
+from modules.websocket_defs import *
+from modules.entity_widgets.entity_blueprint import *
 from modules.entity_widgets.entity_button import *
 from modules.entity_widgets.entity_mapsnap import *
 from modules.entity_widgets.entity_rgb_spinner import *
 from modules.entity_widgets.entity_slider import *
-from modules.entity_widgets.entity_blueprint import *
-from modules.mqtt_window import *
 
 global_font = ('Nintendo DS BIOS',12)
+
+#establish local sending socket
+local_ws = ThreadedWebsocket(2)
+
+""""
+Main App Functions
+"""
+def light_switch(self, entity_id):
+        entity = self.entity_dict[entity_id]
+
+        msg_template = dict(type = "call_service",
+                            domain = "light",
+                            target = dict(entity_id = entity_id))
+        #for messages that would return a response, include return_response = True
+
+        if entity['state'] == "on":
+            msg_template['service'] = "turn_off"
+        else:
+            msg_template['service'] = "turn_on"
+            msg_template['service_data'] = dict(brightness = 255)
+
+        local_ws.send(msg_template)
 
 """
 App Definition
 """
-client = mqtt.Client(mqtt.CallbackAPIVersion.VERSION2)
-client.connect("192.168.0.180")
-client.subscribe("system-entities")
-
-window = MQTTWindow(client = client)
+window = HASSApp()
 window.title("Example")
 window.geometry("800x480")
 
@@ -45,16 +63,6 @@ notebook.tab(1, text = "Lighting")
 notebook.tab(2, text = "Map")
 notebook.pack(side = tk.RIGHT,
               fill = 'y')
-
-def light_switch(self, entity_id):
-        entity = self.entity_dict[entity_id]
-
-        if entity['state'] == "on":
-            msg_dict = {'action': "light.turn_off", 'entity_id': entity_id}
-        else:
-            msg_dict = {'action': "light.turn_on", 'entity_id': entity_id, 'data': {'brightness': 255}}
-
-        self.client.publish("lights",json.dumps(msg_dict))
 
 hallway_poly = [(60,0),(510,0),(510,100),(200,100),(200,140),(60,140)]
 lounge_poly = [(60,140),(200,140),(200,100),(510,100),(510,450),(60,450),(60,380),(0,380),(0,250),(60,250)]
@@ -82,7 +90,7 @@ kitchen_decor = {
 text_output = ttk.Label(window, text = "...")
 text_output.pack()
 
-blueprint_f1 = EntityBlueprint(blueprint_menu, client, border = 10, size = 400)
+blueprint_f1 = EntityBlueprint(blueprint_menu, border = 10, size = 400)
 
 def print_out(current_room: dict):
      text_output['text'] = current_room
@@ -95,19 +103,18 @@ blueprint_f1.add_body("kitchen", kitchen_poly, print_out)
 for k,v in kitchen_decor.items(): blueprint_f1.add_body(k, v, type = 'decor')
 blueprint_f1.grid(row = 0)
 
-test_switch = EntityButton(blueprint_menu, client, light_switch, entity_id = 'light.desk_light', state_channel="lounge", initial_state = False)
-test_switch.grid(row = 1)
-
-light_switches = EntityButton(light_menu, client, light_switch, 'light')
+light_switches = EntityButton(light_menu, light_switch, 'light')
 light_switches.grid(row = 0, columnspan = 2)
 
-light_sliders = EntitySlider(light_menu, client, entity_id = 'light.desk_light', orient = 'vertical')
+light_sliders = EntitySlider(light_menu, local_ws, entity_id = 'light.desk_light', orient = 'vertical')
 light_sliders.grid(column = 0, row = 1, ipadx = 10)
 
-light_rgb = EntityRGBSpinners(light_menu, client, entity_id = 'light.desk_light')
+light_rgb = EntityRGBSpinners(light_menu, local_ws, entity_id = 'light.desk_light')
 light_rgb.grid(column = 1, row = 1)
 
-map_snap = EntityMapSnap(map_menu, client, ['person', 'zone'], size = 400)
+map_snap = EntityMapSnap(map_menu, ['person', 'zone'], size = 400)
 map_snap.pack()
+
+window.state_change_periodic_check(100)
 
 window.mainloop()

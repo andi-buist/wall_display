@@ -1,7 +1,7 @@
-import tkinter as tk
 from tkinter import ttk
 from io import BytesIO
 import datetime
+import dateutil
 from PIL import Image, ImageTk, ImageEnhance
 import matplotlib
 import matplotlib.pyplot as plt
@@ -21,11 +21,11 @@ matplotlib.use('agg')
 cartopy.config['cache_dir'] = "./.cache/cartopy/"
 
 class EntityMapSnap(EntityWidget):
-    def __init__(self, master, client, 
+    def __init__(self, master, 
                  entity_type: str | list[str] = None, entity_id: str | list[str] = None, 
                  state_channel: str | list[str] = [],
                  **kwargs):
-        EntityWidget.__init__(self=self, master=master, widget_name="entity_slider", client=client, 
+        EntityWidget.__init__(self=self, master=master, widget_name="entity_slider",
                               entity_type=entity_type, entity_id=entity_id,
                               state_channel=state_channel,
                               foreach = False,
@@ -226,13 +226,13 @@ class EntityMapSnap(EntityWidget):
             _current_position = [entity['attributes']['longitude'], entity['attributes']['latitude']]
 
             if len(position_history) > 0:
-                _latest_parsed_datetime = max([datetime.datetime.strptime(x, "%Y-%m-%dT%H:%M:%S.%fZ") for x in position_history.keys()])
-                _latest_position = position_history[_latest_parsed_datetime.strftime("%Y-%m-%dT%H:%M:%S.%fZ")]
+                _latest_parsed_datetime = max(position_history.keys())
+                _latest_position = position_history[_latest_parsed_datetime]
 
             if len(position_history) == 0 or _current_position != _latest_position:
                 localcache_write("./data/person_position_log.json",
                                  entity['entity_id'],
-                                 datetime.datetime.strptime(entity['last_updated'], "%Y-%m-%dT%H:%M:%S.%fZ").strftime("%Y-%m-%dT%H:%M:%S.%fZ"),
+                                 dateutil.parser.parse(entity['last_updated']).timestamp(),
                                  _current_position,
                                  12) # assign back
             

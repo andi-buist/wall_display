@@ -1,6 +1,7 @@
-__all__ = ['caching', 'entity_widgets', 'mqtt_window']
+__all__ = ['caching', 'entity_widgets', 'hass_app', 'websocket_defs']
 
 # Import the submodules
 from . import caching
 from . import entity_widgets
-from . import mqtt_window
+from . import hass_app
+from . import websocket_defs

@@ -7,6 +7,7 @@ import json
 
 from .core import *
 from ..caching import *
+from ..websocket_defs import ThreadedWebsocket
 
 global xkcd_colours
 
@@ -15,14 +16,15 @@ with BytesIO(requests.get("https://xkcd.com/color/rgb.txt").content) as file:
     xkcd_colours = dict([tuple(line.decode('utf-8').split("\t")[0:2]) for line in file][1:])
 
 class EntityRGBSpinners(EntityWidget):
-    def __init__(self, master, client, 
+    def __init__(self, master, local_ws: ThreadedWebsocket,
                  entity_type: str | list[str] = None, entity_id: str | list[str] = None, 
                  state_channel: str | list[str] = [],
                  **kwargs):
-        EntityWidget.__init__(self=self, master=master, widget_name="entity_slider", client=client, 
+        EntityWidget.__init__(self=self, master=master, widget_name="entity_slider",
                               entity_type=entity_type, entity_id=entity_id, 
                               state_channel=state_channel,
                               **kwargs)
+        self.local_ws = local_ws
 
     def construct_widget(self, entity_id: str, entity: dict):
         if entity['state'] == "on":
@@ -84,11 +86,15 @@ class EntityRGBSpinners(EntityWidget):
             self.change_entity_colour(entity_id)
 
     def change_entity_colour(self, entity_id: str):
-        action = 'light.turn_on'
         target_colour = tuple(round(x/7 * 255) for x in self.rgb)
 
-        msg_dict = {'action': action, 'entity_id': entity_id, 'data': {'rgb_color': target_colour, 'brightness': max(target_colour)}}
-        self.client.publish("lights",json.dumps(msg_dict))
+        msg_template = dict(type = "call_service",
+                            domain = "light",
+                            service = "turn_on",
+                            service_data = dict(rgb_color = target_colour, brightness = max(target_colour)),
+                            target = dict(entity_id = entity_id))
+
+        self.local_ws.send(msg_template)
 
     def rgb_to_bg(self, index:int = None):
         if index is not None:
