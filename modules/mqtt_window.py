@@ -4,7 +4,7 @@ import json
 
 from .entity_widgets.core import *
 
-class HassWSWindow(tk.Tk):
+class MQTTWindow(tk.Tk):
     """A window with a HassWS connection. Performs actions when the entity_list updates."""
     def __init__(self, client: mqtt.Client, screenName: str | None = None, baseName: str | None = None, className: str = "Tk", useTk: bool = True, sync: bool = False, use: str | None = None):
         tk.Tk.__init__(self, screenName, baseName, className, useTk, sync, use)
