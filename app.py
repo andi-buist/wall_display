@@ -1,3 +1,5 @@
+import theme
+
 from websocket import *
 import tkinter as tk
 from tkinter import ttk
@@ -10,8 +12,6 @@ from modules.entity_widgets.entity_button import *
 from modules.entity_widgets.entity_mapsnap import *
 from modules.entity_widgets.entity_rgb_spinner import *
 from modules.entity_widgets.entity_slider import *
-
-global_font = ('Nintendo DS BIOS',12)
 
 #establish local sending socket
 local_ws = ThreadedWebsocket(2)
@@ -42,18 +42,13 @@ window = HASSApp()
 window.title("Example")
 window.geometry("800x480")
 
-style = ttk.Style()
-#must come before .configure
-style.theme_use('default')
-
-#configure style
-style.configure('.',  font = global_font)
+style = theme.CreateStyle()
 
 notebook = ttk.Notebook(window)
 
-blueprint_menu = ttk.Frame()
-light_menu = ttk.Frame()
-map_menu = ttk.Frame()
+blueprint_menu = ttk.Frame(notebook, style = 'EntityWidget.TFrame')
+light_menu = ttk.Frame(notebook, style = 'EntityWidget.TFrame')
+map_menu = ttk.Frame(notebook, style = 'EntityWidget.TFrame')
 
 notebook.add(blueprint_menu)
 notebook.add(light_menu)
@@ -64,13 +59,14 @@ notebook.tab(2, text = "Map")
 notebook.pack(side = tk.RIGHT,
               fill = 'y')
 
+"""Floor 1 Geometry"""
 hallway_poly = [(60,0),(510,0),(510,100),(200,100),(200,140),(60,140)]
 lounge_poly = [(60,140),(200,140),(200,100),(510,100),(510,450),(60,450),(60,380),(0,380),(0,250),(60,250)]
 kitchen_poly = [(510,0),(820,0),(820,230),(750,230),(820,230),(820,450),(510,450),(510,230),(580,230),(510,230)]
 
 hallway_decor = {
      "h_cabinet": [(80,140),(80,100),(180,100),(180,140)],
-     "stairs": [(290,0),(510,0),(510,100),(290,100)]
+     "f1_stairs": [(290,0),(510,0),(510,100),(290,100)]
      }
 lounge_decor = {
      "sofa": [(510,450),(290,450),(290,380),(440,380),(440,290),(510,290)],
@@ -87,21 +83,50 @@ kitchen_decor = {
      "k_table": [(590,70),(740,70),(740,140),(590,140)]
 }
 
+stair_up_arrow = [(290,30),(450,30),(450,0),(510,50),(450,100),(450,70),(290,70)]
+
+"""Floor 2 Geometry"""
+landing_poly = [(310,0),(590,0),(590,180),(270,180),(270,100),(310,100)]
+landing_decor = [(310,0),(510,0),(510,100),(310,100)]
+bathroom_poly = [(590,0),(770,0),(770,180),(590,180)]
+office_poly = [(520,180),(770,180),(770,450),(430,450),(430,250),(520,250)]
+bedroom_poly = [(270,180),(270,200),(0,200),(0,450),(360,450),(360,180)]
+spareroom_poly = [(0,0),(310,0),(310,100),(270,100),(270,200),(0,200)]
+
+stair_down_arrow = [(310,50),(370,0),(370,30),(510,30),(510,70),(370,70),(370,100)]
+
 text_output = ttk.Label(window, text = "...")
 text_output.pack()
 
-blueprint_f1 = EntityBlueprint(blueprint_menu, border = 10, size = 400)
+blueprint_f1 = EntityBlueprint(blueprint_menu, border = 10, size = 400, state_channel = "blueprint_f1", initial_state = True)
+blueprint_f2 = EntityBlueprint(blueprint_menu, border = 10, size = 400, state_channel = "blueprint_f2", initial_state = False)
 
-def print_out(current_room: dict):
-     text_output['text'] = current_room
-
-blueprint_f1.add_body("hallway", hallway_poly, print_out)
+#first floor
+blueprint_f1.add_body("hallway", hallway_poly)
 for k,v in hallway_decor.items(): blueprint_f1.add_body(k, v, type = 'decor')
-blueprint_f1.add_body("lounge", lounge_poly, print_out)
+blueprint_f1.add_body("lounge", lounge_poly)
 for k,v in lounge_decor.items(): blueprint_f1.add_body(k, v, type = 'decor')
-blueprint_f1.add_body("kitchen", kitchen_poly, print_out)
+blueprint_f1.add_body("kitchen", kitchen_poly)
 for k,v in kitchen_decor.items(): blueprint_f1.add_body(k, v, type = 'decor')
+
+blueprint_f1.add_body("blueprint_f2", stair_up_arrow, type = 'navigate')
+
 blueprint_f1.grid(row = 0)
+
+#second floor
+blueprint_f2.add_body("landing", landing_poly)
+blueprint_f2.add_body("f2_stairs", landing_decor, type = 'decor')
+blueprint_f2.add_body("bathroom", bathroom_poly)
+blueprint_f2.add_body("office", office_poly)
+blueprint_f2.add_body("bedroom", bedroom_poly)
+blueprint_f2.add_body("spareroom", spareroom_poly)
+
+blueprint_f2.add_body("blueprint_f1", stair_down_arrow, type = 'navigate')
+
+blueprint_f2.grid(row = 0)
+
+f1_lounge_lightswitch = EntityButton(blueprint_menu, light_switch, entity_id = 'light.floor_lamp', state_channel = "lounge", initial_state = False)
+f1_lounge_lightswitch.grid(row = 1, columnspan = 2)
 
 light_switches = EntityButton(light_menu, light_switch, 'light')
 light_switches.grid(row = 0, columnspan = 2)

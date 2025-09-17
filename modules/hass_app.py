@@ -9,6 +9,8 @@ from modules.entity_widgets.core import *
 class HASSApp(tk.Tk):
     def __init__(self):
         tk.Tk.__init__(self)
+        self.configure(bg = "#ffffff")
+
         self.state_change_queue = queue.Queue()
         
         #start connections to sockets, UIDS 2,3

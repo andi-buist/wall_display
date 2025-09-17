@@ -6,10 +6,12 @@ class EntityButton(EntityWidget):
     def __init__(self, master,
                  command: callable, 
                  entity_type: str | list[str] = None, entity_id: str | list[str] = None, 
+                 initial_state: bool = True,
                  state_channel: str | list[str] = [],
                  **kwargs):
         EntityWidget.__init__(self = self, master = master, widget_name = "entity_button",
                               entity_type = entity_type, entity_id = entity_id, 
+                              initial_state = initial_state,
                               state_channel = state_channel,
                               **kwargs)
 

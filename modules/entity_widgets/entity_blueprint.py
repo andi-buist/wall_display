@@ -11,16 +11,17 @@ from .core import *
 class EntityBlueprint(EntityWidget):
     def __init__(self, master, 
                  entity_type: str | list[str] = None, entity_id: str | list[str] = None,
+                 initial_state: bool = True,
                  state_channel: str | list[str] = [],
                  **kwargs):
         EntityWidget.__init__(self=self, master=master, widget_name="entity_blueprint",
-                              entity_type=entity_type, entity_id=entity_id,  
+                              entity_type=entity_type, entity_id=entity_id,
+                              initial_state=initial_state,
                               state_channel = state_channel, 
                               foreach = False,
                               **kwargs)
         self.body_dict = {}
 
-        
     def construct_widget(self, entity_id: str, entity: dict):
         #find the max x,y
         coord_data_flat = [x['coords'] for x in self.body_dict.values()]
@@ -47,16 +48,17 @@ class EntityBlueprint(EntityWidget):
 
         # for each body, draw polygon using accompanying 'style' and 'selection' as choice.
         for current_body in self.body_dict.values():
-            bg_draw.polygon([tuple((y * inner_scale) + border for y in x) for x in current_body['coords']], **current_body['style'][current_body['selected']])
+            bg_draw.polygon([tuple((y * inner_scale) + border for y in x) for x in current_body['coords']], **current_body['style'][current_body['style_state']])
         
         bg_image = bg_image.convert('1')
 
         self.photo_image = ImageTk.PhotoImage(bg_image)
 
         """Make the canvas, using first image as background"""
-        widget = tk.Canvas(self, width = outer_extent[0], height = outer_extent[1])
+        widget = tk.Canvas(self, width = outer_extent[0], height = outer_extent[1], borderwidth=1)
         widget.create_image(0, 0, anchor = 'nw', image = self.photo_image)
 
+        #draw room interactives
         for id, current_body in self.body_dict.items():
             if current_body['type'] == "room":
                 self.body_dict[id]['poly'] = widget.create_polygon([[(y * inner_scale) + border for y in x] for x in current_body['coords']], fill = "")
@@ -64,35 +66,50 @@ class EntityBlueprint(EntityWidget):
                     self.body_dict[id]['poly'],
                     '<Button-1>',
                     lambda e, id = id: self.select_room(id))
+        
+        #draw navigate interactives
+        for id, current_body in self.body_dict.items():
+            if current_body['type'] == "navigate":
+                self.body_dict[id]['poly'] = widget.create_polygon([[(y * inner_scale) + border for y in x] for x in current_body['coords']], fill = "")
+                widget.tag_bind(
+                    self.body_dict[id]['poly'],
+                    '<Button-1>',
+                    lambda e, id = id, select = False: self.change_room(id))
 
         return widget
     
-    def add_body(self, id: str, coords: list[tuple], command: callable = None, type: Literal["room","decor"] = "room"):
+    def add_body(self, id: str, coords: list[tuple], command: callable = None, type: Literal["room","decor","navigate"] = "room"):
         room = dict(outline = "#000000", fill = "#ffffff")
-        selected_room = dict(outline = "#000000", fill = "#999999")
+        active_room = dict(outline = "#000000", fill = "#cccccc")
 
-        decor = dict(outline = "#000000", fill = "#666666")
+        decor = dict(outline = "#000000", fill = "#999999")
+
+        navigate = dict(outline = "#000000", fill = "#666666")
 
         match type:
             case "room":
-                style = dict(yes = selected_room, no = room)
+                style = dict(active = active_room, default = room)
             case "decor":
-                style = dict(no = decor)
+                style = dict(default = decor)
+            case "navigate":
+                style = dict(default = navigate)
             case _:
                 raise KeyError("str type not recognised")
 
-        if command is None:
-            command = print
-
-        self.body_dict[id] = dict(type = type, coords = coords, style = style, command = command, selected = 'no')
+        self.body_dict[id] = dict(type = type, coords = coords, style = style, style_state = 'default')
     
     def select_room(self, id: str):
+        """Sends a signal on the given ID."""
         for _id, current_body in self.body_dict.items():
-            if _id == id and current_body['selected'] == "no":
-                current_body['selected'] = "yes"
-                #pub.sendMessage(_id, **dict(state = True))
-            else:
-                current_body['selected'] = "no"
-                #pub.sendMessage(_id, **dict(state = False))
-
+                if _id == id and current_body['style_state'] == "default":
+                    current_body['style_state'] = "active"
+                    pub.sendMessage(_id, **dict(state = True))
+                else:
+                    current_body['style_state'] = "default"
+                    pub.sendMessage(_id, **dict(state = False))
+        self.build()
+    
+    def change_room(self, id: str):
+        self.state = False
+        pub.sendMessage(id, **dict(state = True))
         self.build()

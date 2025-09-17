@@ -1,17 +1,18 @@
 import tkinter as tk
 from tkinter import ttk
 from PIL import Image, ImageTk
-import paho.mqtt.client as mqtt
 import traceback
 from pubsub import *
 
-class EntityWidget(tk.Widget):
+class EntityWidget(ttk.Frame):
     def __init__(self, master, widget_name,
                  entity_type: str | list[str] = None, entity_id: str | list[str] = None, 
                  initial_state: bool = True,
                  foreach: bool = True, state_channel: str | list[str] = [],
                  **kwargs):
         ttk.Frame.__init__(self, master)
+        self.configure(style = 'EntityWidget.TFrame')
+
         #pass alongs
         self.kwargs = kwargs
         self.foreach = foreach
@@ -20,7 +21,6 @@ class EntityWidget(tk.Widget):
         if not isinstance(state_channel, list):
             state_channel = [state_channel]
         for channel in state_channel:
-            print(channel)
             pub.subscribe(self.state_listener, channel)
 
         #the initial entity types and ids
@@ -29,16 +29,11 @@ class EntityWidget(tk.Widget):
         #the up-to-date entity dictionary
         self.entity_dict_full = {}
         self.entity_dict = {}
-
-        #the widget to be instanced
-        self.widget: tk.Misc = None
-
         #is the widget visible?
         self.state: bool = initial_state
 
-        #note: __init__ should not explicitly call build(). build() is coordinated 
-        # by the HASSEngine in what's called "lazy loading", 
-        # only making the resource once entity_dict is available
+        #note: __init__ should never call build(). HassApp handles building.
+
     def entity_dict_handler(self, message:dict):
         self.entity_dict_full = {x['entity_id']: x for x in message}
 
@@ -48,7 +43,6 @@ class EntityWidget(tk.Widget):
                 prefix = msg['entity_id'].split(".")[0]
                 if (self.entity_type is not None and prefix in self.entity_type) or (self.entity_id is not None and msg['entity_id'] in self.entity_id):
                     filtered_messages.append(msg)
-
             for msg in filtered_messages:
                 self.entity_dict[msg['entity_id']] = msg
         else:
@@ -83,6 +77,10 @@ class EntityWidget(tk.Widget):
                     else:
                         widget = self.construct_widget(None, self.entity_dict, **kwargs)
                         widget.pack()
+                else:
+                    # if the EntityWidget is inactive, pack an empty 0-size Frame as a child to recalibrate sizing. Hacky, but it works!
+                    widget = ttk.Frame(self, height = 0)
+                    widget.pack()
             else:
                 ttk.Label(self, text="Loading...").pack()
         except Exception as e:

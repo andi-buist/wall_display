@@ -5,6 +5,7 @@ import dateutil
 from PIL import Image, ImageTk, ImageEnhance
 import matplotlib
 import matplotlib.pyplot as plt
+import matplotlib.patches as patches
 from matplotlib.offsetbox import OffsetImage, AnnotationBbox
 from adjustText import adjust_text
 import cartopy
@@ -86,6 +87,7 @@ class EntityMapSnap(EntityWidget):
         
         """Calculating map extent"""
         _minimum_aspect = 0.0015
+        _map_buffer_amount = 0.1
 
         match self.map_focus:
             case _:
@@ -94,7 +96,7 @@ class EntityMapSnap(EntityWidget):
                 map_dimension = max(max(_lonlat_diff), _minimum_aspect) # don't zoom in past target
                 lonlat_centroid = (min([x['attributes']['longitude'] for x in people]) + (_lonlat_diff[0]/2),
                                     min([x['attributes']['latitude'] for x in people]) + (_lonlat_diff[1]/2))
-        map_buffer = map_dimension * 0.1
+        map_buffer = map_dimension * _map_buffer_amount
 
         extent = [
             lonlat_centroid[0] - (map_dimension/2) - map_buffer,
@@ -129,7 +131,7 @@ class EntityMapSnap(EntityWidget):
                 label_store = self.plt_add_zones(ax, zones, -map_buffer, label_store)
                 label_store = self.plt_add_people(ax, people, map_buffer, label_store)
             case "astro":
-                self.plt_add_astronomy(fig, ax, lonlat_centroid, extent, map_dimension + map_buffer)
+                self.plt_add_astronomy(fig, ax, lonlat_centroid, extent, (map_dimension/2) + (map_buffer/2)) # +map buffer would have circle perfectly fit square, but we want some allowance for icons
     
         adjust_text(label_store, arrowprops=dict(arrowstyle = '-', color = "#000000", linewidth = 3, zorder = 2))
         """---End of second plot cycle---"""
@@ -269,29 +271,36 @@ class EntityMapSnap(EntityWidget):
         return label_store
     
     def plt_add_astronomy(self, fig: plt.Figure, ax: plt.Axes, lon_lat: tuple, extent: list, max_radius: float):
+        def alt_az_to_viewport(alt_az: tuple):
+            #convert to lon lat at origin where circle bounds viewport square
+            conversion = [math.sin(alt_az[1]), math.cos(alt_az[1])] 
+            conversion = [x * (1 - (alt_az[0]/math.radians(90))) * max_radius for x in conversion]
+
+            #move from origin to viewport centre
+            conversion = [sum(x) for x in zip(lon_lat, conversion)]
+            #clamp to within viewport square
+            conversion = (min(max(conversion[0], extent[0]), extent[1]), min(max(conversion[1], extent[2]), extent[3]))
+
+            return conversion
+
         astro_data = get_astro_data(lon_lat, astronomy_config["id"], astronomy_config["secret"])
 
         ax.axvline(x = lon_lat[0], color = "#000000")
         ax.axhline(y = lon_lat[1], color = "#000000")
+        ax.add_patch(patches.Circle(lon_lat, max_radius, edgecolor = "#000000", facecolor = "none"))
 
         legend_text = ""
 
         for body in astro_data:
             if body['id'] in ['sun', 'moon', 'mercury', 'venus', 'mars', 'jupiter', 'saturn', 'uranus', 'neptune']:
                 #get altitude and azimuth
+
                 alt_az = (math.radians(float(body['position']['horizontal']['altitude']['degrees'])), 
                         math.radians(float(body['position']['horizontal']['azimuth']['degrees'])))
                 
                 # above/on horizon
                 if alt_az[0] >= 0:
-                    #convert to lon lat at origin where circle bounds viewport square
-                    conversion = [math.sin(alt_az[1]), math.cos(alt_az[1])] 
-                    conversion = [x * max(((1 - alt_az[0])/math.radians(90)),0) * (0.5 * math.sqrt(2) * max_radius) for x in conversion]
-
-                    #move from origin to viewport centre
-                    conversion = [sum(x) for x in zip(lon_lat, conversion)]
-                    #clamp to within viewport square
-                    conversion = (min(max(conversion[0], extent[0]), extent[1]), min(max(conversion[1], extent[2]), extent[3]))
+                    conversion = alt_az_to_viewport(alt_az)
 
                     astro_icon = OffsetImage(plt.imread("./theme/ui/icons/astro/" + body['id'] + ".png"), zoom = 1.5, interpolation = 'nearest')
                     astro_marker = AnnotationBbox(astro_icon, conversion, frameon = False, annotation_clip = True)
