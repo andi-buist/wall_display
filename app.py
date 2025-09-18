@@ -1,5 +1,6 @@
 import theme
 
+import os
 from websocket import *
 import tkinter as tk
 from tkinter import ttk
@@ -19,21 +20,6 @@ local_ws = ThreadedWebsocket(2)
 """"
 Main App Functions
 """
-def light_switch(self, entity_id):
-        entity = self.entity_dict[entity_id]
-
-        msg_template = dict(type = "call_service",
-                            domain = "light",
-                            target = dict(entity_id = entity_id))
-        #for messages that would return a response, include return_response = True
-
-        if entity['state'] == "on":
-            msg_template['service'] = "turn_off"
-        else:
-            msg_template['service'] = "turn_on"
-            msg_template['service_data'] = dict(brightness = 255)
-
-        local_ws.send(msg_template)
 
 """
 App Definition
@@ -51,11 +37,9 @@ light_menu = ttk.Frame(notebook, style = 'EntityWidget.TFrame')
 map_menu = ttk.Frame(notebook, style = 'EntityWidget.TFrame')
 
 notebook.add(blueprint_menu)
-notebook.add(light_menu)
 notebook.add(map_menu)
 notebook.tab(0, text = "Home")
-notebook.tab(1, text = "Lighting")
-notebook.tab(2, text = "Map")
+notebook.tab(1, text = "Map")
 notebook.pack(side = tk.RIGHT,
               fill = 'y')
 
@@ -95,9 +79,7 @@ spareroom_poly = [(0,0),(310,0),(310,100),(270,100),(270,200),(0,200)]
 
 stair_down_arrow = [(310,50),(370,0),(370,30),(510,30),(510,70),(370,70),(370,100)]
 
-text_output = ttk.Label(window, text = "...")
-text_output.pack()
-
+#blueprint widgets
 blueprint_f1 = EntityBlueprint(blueprint_menu, border = 10, size = 400, state_channel = "blueprint_f1", initial_state = True)
 blueprint_f2 = EntityBlueprint(blueprint_menu, border = 10, size = 400, state_channel = "blueprint_f2", initial_state = False)
 
@@ -125,17 +107,22 @@ blueprint_f2.add_body("blueprint_f1", stair_down_arrow, type = 'navigate')
 
 blueprint_f2.grid(row = 0)
 
-f1_lounge_lightswitch = EntityButton(blueprint_menu, light_switch, entity_id = 'light.floor_lamp', state_channel = "lounge", initial_state = False)
-f1_lounge_lightswitch.grid(row = 1, columnspan = 2)
+#blueprint switches
+def light_switchboard(master, entity_id: str, state_channel: str):
+    out = ttk.Frame(master)
+    out.grid_columnconfigure(0, weight = 1)
+    out.grid_columnconfigure(1, weight = 4)
 
-light_switches = EntityButton(light_menu, light_switch, 'light')
-light_switches.grid(row = 0, columnspan = 2)
+    EntityButton(out, local_ws, EntityButton.light_switch, entity_id = entity_id, state_channel = state_channel, initial_state = False).grid(row = 0, columnspan = 2)
+    EntitySlider(out, local_ws, entity_id = entity_id, state_channel = state_channel, initial_state = False, orient = 'vertical').grid(row = 1, column = 0)
+    EntityRGBSpinners(out, local_ws, entity_id = entity_id, state_channel = state_channel, initial_state = False).grid(row = 1, column = 1)
 
-light_sliders = EntitySlider(light_menu, local_ws, entity_id = 'light.desk_light', orient = 'vertical')
-light_sliders.grid(column = 0, row = 1, ipadx = 10)
+    return(out)
 
-light_rgb = EntityRGBSpinners(light_menu, local_ws, entity_id = 'light.desk_light')
-light_rgb.grid(column = 1, row = 1)
+light_switchboard(blueprint_menu, 'light.floor_lamp', "lounge").grid(row = 1)
+light_switchboard(blueprint_menu, 'light.kitchen_light', "kitchen").grid(row = 1)
+light_switchboard(blueprint_menu, 'light.desk_light', "office").grid(row = 1)
+light_switchboard(blueprint_menu, 'light.bedside_lamp', "bedroom").grid(row = 1)
 
 map_snap = EntityMapSnap(map_menu, ['person', 'zone'], size = 400)
 map_snap.pack()

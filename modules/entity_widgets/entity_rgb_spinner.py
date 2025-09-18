@@ -7,7 +7,7 @@ import json
 
 from .core import *
 from ..caching import *
-from ..websocket_defs import ThreadedWebsocket
+from modules.websocket_defs import ThreadedWebsocket
 
 global xkcd_colours
 

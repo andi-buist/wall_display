@@ -84,7 +84,7 @@ class EntityBlueprint(EntityWidget):
 
         decor = dict(outline = "#000000", fill = "#999999")
 
-        navigate = dict(outline = "#000000", fill = "#666666")
+        navigate = dict(outline = "#000000", fill = "#666666" )
 
         match type:
             case "room":
@@ -100,16 +100,23 @@ class EntityBlueprint(EntityWidget):
     
     def select_room(self, id: str):
         """Sends a signal on the given ID."""
+        #get state of body before deselect_all
+        interacted_body = self.body_dict[id]
+        
+        self.deselect_all()
+
+        self.body_dict[id]['style_state'] = "active"
+        pub.sendMessage(id, **dict(state = True))    
+
+        self.build()
+    
+    def deselect_all(self):
         for _id, current_body in self.body_dict.items():
-                if _id == id and current_body['style_state'] == "default":
-                    current_body['style_state'] = "active"
-                    pub.sendMessage(_id, **dict(state = True))
-                else:
-                    current_body['style_state'] = "default"
-                    pub.sendMessage(_id, **dict(state = False))
+            current_body['style_state'] = "default"
+            pub.sendMessage(_id, **dict(state = False))
         self.build()
     
     def change_room(self, id: str):
         self.state = False
+        self.deselect_all()
         pub.sendMessage(id, **dict(state = True))
-        self.build()

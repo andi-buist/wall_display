@@ -13,5 +13,5 @@ def CreateStyle():
                     background = "#ffffff",
                     borderwidth = 10,
                     font = global_font)
-    
+
     return style

@@ -3,6 +3,7 @@ from tkinter import ttk
 from PIL import Image, ImageTk
 import traceback
 from pubsub import *
+import pywinstyles
 
 class EntityWidget(ttk.Frame):
     def __init__(self, master, widget_name,
@@ -11,6 +12,7 @@ class EntityWidget(ttk.Frame):
                  foreach: bool = True, state_channel: str | list[str] = [],
                  **kwargs):
         ttk.Frame.__init__(self, master)
+
         self.configure(style = 'EntityWidget.TFrame')
 
         #pass alongs
@@ -68,21 +70,31 @@ class EntityWidget(ttk.Frame):
             for child in self.winfo_children():
                 child.destroy()
             
+            inactive_widgets = []
+            widgets = []
+
             if len(self.entity_dict) > 0:
+                #establish list of widgets
                 if self.state:
                     if self.foreach:
                         for entity_id, entity in self.entity_dict.items():
                             widget = self.construct_widget(entity_id, entity, **kwargs)
-                            widget.pack()
+                            widget.bind('<Button-3>', func = lambda event, s = self: print(event, s))
+                            widgets.append(widget)
                     else:
                         widget = self.construct_widget(None, self.entity_dict, **kwargs)
-                        widget.pack()
+                        widget.bind('<Button-3>', func = lambda event, s = self: print(event, s))
+                        widgets.append(widget)
                 else:
-                    # if the EntityWidget is inactive, pack an empty 0-size Frame as a child to recalibrate sizing. Hacky, but it works!
-                    widget = ttk.Frame(self, height = 0)
-                    widget.pack()
-            else:
-                ttk.Label(self, text="Loading...").pack()
+                    widget = tk.Frame(self, width = 0, height = 0, bg = 'white')
+                    inactive_widgets.append(widget)
+            
+            for widget in inactive_widgets:
+                widget.pack(fill = 'none', padx = 0, pady = 0, ipadx = 0, ipady = 0)
+            for widget in widgets:
+                widget.pack(fill = 'x', expand = True)
+            
+
         except Exception as e:
             #create and format debug image, add details to label, pack in place of broken widget
             debug_image = Image.open("./theme/ui/img/broken_widget.png")
@@ -96,6 +108,8 @@ class EntityWidget(ttk.Frame):
 
             debug_label = ttk.Label(self, text="Something went wrong...\nError Details: " + traceback.format_exc() +"\nRaised by: " + str(self))
             debug_label.pack()
+
+        # self.winfo_toplevel().update()
     
     def construct_widget(self, entity_id: str, entity: dict):
         return ttk.Label(self,
@@ -105,3 +119,4 @@ class EntityWidget(ttk.Frame):
     def state_listener(self, state: bool):
         self.state = state
         self.build()
+    
