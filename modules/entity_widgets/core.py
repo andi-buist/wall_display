@@ -70,7 +70,6 @@ class EntityWidget(ttk.Frame):
             for child in self.winfo_children():
                 child.destroy()
             
-            inactive_widgets = []
             widgets = []
 
             if len(self.entity_dict) > 0:
@@ -85,12 +84,7 @@ class EntityWidget(ttk.Frame):
                         widget = self.construct_widget(None, self.entity_dict, **kwargs)
                         widget.bind('<Button-3>', func = lambda event, s = self: print(event, s))
                         widgets.append(widget)
-                else:
-                    widget = tk.Frame(self, width = 0, height = 0, bg = 'white')
-                    inactive_widgets.append(widget)
             
-            for widget in inactive_widgets:
-                widget.pack(fill = 'none', padx = 0, pady = 0, ipadx = 0, ipady = 0)
             for widget in widgets:
                 widget.pack(fill = 'x', expand = True)
             
@@ -116,7 +110,8 @@ class EntityWidget(ttk.Frame):
                          text = entity['attributes']['friendly_name'])
     
     #will set the state of the EntityWidget to the 'state' value of the incoming message, then rebuild
-    def state_listener(self, state: bool):
-        self.state = state
-        self.build()
+    def state_listener(self, state: bool, context_id: str):
+        if state is not None:
+            self.state = state
+            self.build()
     

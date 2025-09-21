@@ -20,7 +20,7 @@ class EntityRGBSpinners(EntityWidget):
                  entity_type: str | list[str] = None, entity_id: str | list[str] = None, 
                  state_channel: str | list[str] = [],
                  **kwargs):
-        EntityWidget.__init__(self=self, master=master, widget_name="entity_slider",
+        EntityWidget.__init__(self=self, master=master, widget_name="entity_rgb_spinner",
                               entity_type=entity_type, entity_id=entity_id, 
                               state_channel=state_channel,
                               **kwargs)

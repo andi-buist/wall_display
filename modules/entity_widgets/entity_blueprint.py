@@ -55,7 +55,7 @@ class EntityBlueprint(EntityWidget):
         self.photo_image = ImageTk.PhotoImage(bg_image)
 
         """Make the canvas, using first image as background"""
-        widget = tk.Canvas(self, width = outer_extent[0], height = outer_extent[1], borderwidth=1)
+        widget = tk.Canvas(self, width = outer_extent[0], height = outer_extent[1], borderwidth=1, bg = "#ffffff")
         widget.create_image(0, 0, anchor = 'nw', image = self.photo_image)
 
         #draw room interactives
@@ -101,22 +101,26 @@ class EntityBlueprint(EntityWidget):
     def select_room(self, id: str):
         """Sends a signal on the given ID."""
         #get state of body before deselect_all
-        interacted_body = self.body_dict[id]
+        interacted_body_state = self.body_dict[id]['style_state']
         
         self.deselect_all()
 
-        self.body_dict[id]['style_state'] = "active"
-        pub.sendMessage(id, **dict(state = True))    
+        if interacted_body_state == "active":
+            self.body_dict[id]['style_state'] = "default"
+            pub.sendMessage(id, **dict(state = False, context_id = id))    
+        else:
+            self.body_dict[id]['style_state'] = "active"
+            pub.sendMessage(id, **dict(state = True, context_id = id))    
 
         self.build()
     
     def deselect_all(self):
         for _id, current_body in self.body_dict.items():
             current_body['style_state'] = "default"
-            pub.sendMessage(_id, **dict(state = False))
+            pub.sendMessage(_id, **dict(state = False, context_id = None))
         self.build()
     
     def change_room(self, id: str):
         self.state = False
         self.deselect_all()
-        pub.sendMessage(id, **dict(state = True))
+        pub.sendMessage(id, **dict(state = True, context_id = None))

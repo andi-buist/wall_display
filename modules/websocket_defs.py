@@ -1,5 +1,4 @@
 from websocket import *
-from threading import *
 import tkinter as tk
 import json
 import time

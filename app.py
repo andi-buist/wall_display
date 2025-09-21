@@ -10,6 +10,7 @@ from modules.caching import *
 from modules.websocket_defs import *
 from modules.entity_widgets.entity_blueprint import *
 from modules.entity_widgets.entity_button import *
+from modules.entity_widgets.entity_context_frame import *
 from modules.entity_widgets.entity_mapsnap import *
 from modules.entity_widgets.entity_rgb_spinner import *
 from modules.entity_widgets.entity_slider import *
@@ -109,7 +110,7 @@ blueprint_f2.grid(row = 0)
 
 #blueprint switches
 def light_switchboard(master, entity_id: str, state_channel: str):
-    out = ttk.Frame(master)
+    out = ttk.Frame(master, style = 'EntityWidget.TFrame')
     out.grid_columnconfigure(0, weight = 1)
     out.grid_columnconfigure(1, weight = 4)
 
@@ -119,10 +120,12 @@ def light_switchboard(master, entity_id: str, state_channel: str):
 
     return(out)
 
-light_switchboard(blueprint_menu, 'light.floor_lamp', "lounge").grid(row = 1)
-light_switchboard(blueprint_menu, 'light.kitchen_light', "kitchen").grid(row = 1)
-light_switchboard(blueprint_menu, 'light.desk_light', "office").grid(row = 1)
-light_switchboard(blueprint_menu, 'light.bedside_lamp', "bedroom").grid(row = 1)
+cf1 = ContextFrame(blueprint_menu)
+cf1.add_widget("lounge", light_switchboard(cf1.notebook, 'light.floor_lamp', "lounge"))
+cf1.add_widget("kitchen", light_switchboard(cf1.notebook, 'light.kitchen_light', "kitchen"))
+cf1.add_widget("office", light_switchboard(cf1.notebook, 'light.desk_light', "office"))
+cf1.add_widget("bedroom", light_switchboard(cf1.notebook, 'light.bedside_lamp', "bedroom"))
+cf1.grid(row = 1)
 
 map_snap = EntityMapSnap(map_menu, ['person', 'zone'], size = 400)
 map_snap.pack()

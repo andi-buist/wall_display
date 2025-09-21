@@ -20,7 +20,7 @@ class HASSApp(tk.Tk):
     """-----Heavy Refresh Functions-----"""
     #the "heavy" refresh on_message, as opposed to the "light" refresh
     def entity_dict_refresh(self, message: dict):
-        for child in self.get_all_children(self):
+        for child in get_all_children(self):
             if isinstance(child, EntityWidget):
                 child.entity_dict_handler(message['result'])
         # #then update
@@ -44,17 +44,17 @@ class HASSApp(tk.Tk):
     
     #the "light" refresh on_message, as opposed to the "heavy" refresh
     def state_refresh(self, message: dict):
-        for child in self.get_all_children(self):
+        for child in get_all_children(self):
             if isinstance(child, EntityWidget):
                 child.state_change_handler(message)
         #then update
         self.update()
     """-----End-----"""
     
-    def get_all_children(self, widget, finList=None):
-        finList = finList or []
-        children = widget.winfo_children()
-        for item in children:
-            finList.append(item)
-            self.get_all_children(item, finList)
-        return finList
+def get_all_children(widget, finList=None):
+    finList = finList or []
+    children = widget.winfo_children()
+    for item in children:
+        finList.append(item)
+        get_all_children(item, finList)
+    return finList

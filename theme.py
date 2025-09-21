@@ -11,7 +11,8 @@ def CreateStyle():
     style.configure('EntityWidget.TFrame',
                     foreground = "#000000",
                     background = "#ffffff",
-                    borderwidth = 10,
                     font = global_font)
+    
+    style.layout('ContextFrame.TNotebook.Tab', [])
 
     return style

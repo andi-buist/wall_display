@@ -1,5 +1,3 @@
-import json
-
 from .core import *
 from modules.websocket_defs import *
 
