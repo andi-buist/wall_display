@@ -11,9 +11,7 @@ class EntityWidget(ttk.Frame):
                  initial_state: bool = True,
                  foreach: bool = True, state_channel: str | list[str] = [],
                  **kwargs):
-        ttk.Frame.__init__(self, master)
-
-        self.configure(style = 'EntityWidget.TFrame')
+        ttk.Frame.__init__(self, master, style = 'EntityWidget.TFrame')
 
         #pass alongs
         self.kwargs = kwargs

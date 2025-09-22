@@ -18,7 +18,8 @@ class EntitySlider(EntityWidget):
                            from_ = 255,
                            to = 0,
                            orient = (self.kwargs.get('orient')),
-                           length = 70)
+                           length = 70,
+                           style = 'EntityWidget.Vertical.TScale')
         
         #pull cached value if exists
         _init_value = entity_cache_read(entity_id, 'value', entity['attributes']['brightness'] if entity['state'] == "on" else 0)

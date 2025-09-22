@@ -3,10 +3,10 @@ import tkinter as tk
 import json
 import time
 import threading
+from config import hass_config
 
-HASS_WS_URL = "ws://192.168.0.180:8123/api/websocket"
-with open(".secrets/hass.txt") as f: 
-    TOKEN = f.read()
+HASS_WS_URL = hass_config['url']
+TOKEN = hass_config['secret']
 
 #define some helper functions that do things on connection - then, make connection, point to helpers, run forever **on thread**.
 #note: i suppose this could be where we diversify? start_connect could all be the same, but then the target lambda different dependent on use-case

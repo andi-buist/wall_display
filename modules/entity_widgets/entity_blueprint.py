@@ -55,7 +55,7 @@ class EntityBlueprint(EntityWidget):
         self.photo_image = ImageTk.PhotoImage(bg_image)
 
         """Make the canvas, using first image as background"""
-        widget = tk.Canvas(self, width = outer_extent[0], height = outer_extent[1], borderwidth=1, bg = "#ffffff")
+        widget = tk.Canvas(self, width = outer_extent[0], height = outer_extent[1], bg = "#ffffff", highlightbackground = "#ffffff")
         widget.create_image(0, 0, anchor = 'nw', image = self.photo_image)
 
         #draw room interactives

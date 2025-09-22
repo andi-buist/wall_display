@@ -31,7 +31,7 @@ window.geometry("800x480")
 
 style = theme.CreateStyle()
 
-notebook = ttk.Notebook(window)
+notebook = ttk.Notebook(window, style = 'AppStyle.TNotebook')
 
 blueprint_menu = ttk.Frame(notebook, style = 'EntityWidget.TFrame')
 light_menu = ttk.Frame(notebook, style = 'EntityWidget.TFrame')

@@ -22,7 +22,8 @@ class EntityButton(EntityWidget):
         return ttk.Button(self,
                           text = entity['attributes']['friendly_name'],
                           command = lambda: self.command(self, entity_id),
-                          width = 30)
+                          width = 30,
+                          style = 'EntityWidget.TButton')
     
     def light_switch(self, entity_id):
         entity = self.entity_dict[entity_id]

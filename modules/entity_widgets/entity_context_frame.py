@@ -4,7 +4,7 @@ from modules.websocket_defs import *
 
 class ContextFrame(ttk.Frame):
     def __init__(self, master, **kwargs):
-        ttk.Frame.__init__(self, master, **kwargs)
+        ttk.Frame.__init__(self, master, style = 'EntityWidget.TFrame', **kwargs)
         
         self.notebook = ttk.Notebook(self, style = 'ContextFrame.TNotebook')
 

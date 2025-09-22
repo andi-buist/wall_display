@@ -40,10 +40,11 @@ class EntityRGBSpinners(EntityWidget):
 
             self.label_text = entity['attributes']['friendly_name'] + " is offline..."
 
-        widget = ttk.Frame(self)
+        widget = ttk.Frame(self, style = 'EntityWidget.TFrame')
         
         self.top_label = ttk.Label(widget,
-                                    text = self.label_text)
+                                    text = self.label_text,
+                                    style = 'EntityWidget.TLabel')
 
         self.red_channel = tk.Frame(widget, bg = self.rgb_to_bg(0), width = 64, height = 64)
         self.green_channel = tk.Frame(widget, bg = self.rgb_to_bg(1), width = 64, height = 64)
@@ -54,12 +55,12 @@ class EntityRGBSpinners(EntityWidget):
         self.green_channel.grid(column=1,row=2)
         self.blue_channel.grid(column=2,row=2)
 
-        ttk.Button(widget, command = lambda x=1, entity_id = entity_id, entity = entity: self.increment_channel(0,x, entity_id, entity)).grid(column=0,row=1)
-        ttk.Button(widget, command = lambda x=-1, entity_id = entity_id, entity = entity: self.increment_channel(0,x, entity_id, entity)).grid(column=0,row=3)
-        ttk.Button(widget, command = lambda x=1, entity_id = entity_id, entity = entity: self.increment_channel(1,x, entity_id, entity)).grid(column=1,row=1)
-        ttk.Button(widget, command = lambda x=-1, entity_id = entity_id, entity = entity: self.increment_channel(1,x, entity_id, entity)).grid(column=1,row=3)
-        ttk.Button(widget, command = lambda x=1, entity_id = entity_id, entity = entity: self.increment_channel(2,x, entity_id, entity)).grid(column=2,row=1)
-        ttk.Button(widget, command = lambda x=-1, entity_id = entity_id, entity = entity: self.increment_channel(2,x, entity_id, entity)).grid(column=2,row=3)
+        ttk.Button(widget, style = 'EntityWidget.TButton', command = lambda x=1, entity_id = entity_id, entity = entity: self.increment_channel(0,x, entity_id, entity)).grid(column=0,row=1)
+        ttk.Button(widget, style = 'EntityWidget.TButton', command = lambda x=-1, entity_id = entity_id, entity = entity: self.increment_channel(0,x, entity_id, entity)).grid(column=0,row=3)
+        ttk.Button(widget, style = 'EntityWidget.TButton', command = lambda x=1, entity_id = entity_id, entity = entity: self.increment_channel(1,x, entity_id, entity)).grid(column=1,row=1)
+        ttk.Button(widget, style = 'EntityWidget.TButton', command = lambda x=-1, entity_id = entity_id, entity = entity: self.increment_channel(1,x, entity_id, entity)).grid(column=1,row=3)
+        ttk.Button(widget, style = 'EntityWidget.TButton', command = lambda x=1, entity_id = entity_id, entity = entity: self.increment_channel(2,x, entity_id, entity)).grid(column=2,row=1)
+        ttk.Button(widget, style = 'EntityWidget.TButton', command = lambda x=-1, entity_id = entity_id, entity = entity: self.increment_channel(2,x, entity_id, entity)).grid(column=2,row=3)
         
         return widget
         
