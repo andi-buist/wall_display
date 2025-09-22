@@ -3,7 +3,6 @@ from tkinter import ttk
 from PIL import Image, ImageTk
 import traceback
 from pubsub import *
-import pywinstyles
 
 class EntityWidget(ttk.Frame):
     def __init__(self, master, widget_name,
