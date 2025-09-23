@@ -11,7 +11,8 @@ def CreateStyle():
     
     style.configure('EntityWidget.TFrame',
                     foreground = "#000000",
-                    background = "#ffffff")
+                    background = "#ffffff",
+                    expand = True)
     
     style.configure('EntityWidget.TButton',
                     foreground = "#000000",
@@ -40,6 +41,11 @@ def CreateStyle():
               foreground=[("selected", "#ffffff"),("", "#000000")],
               background=[("selected", "#000000"),("", "#ffffff")])
 
+    style.configure('ContextFrame.TNotebook',
+                    foreground = "#000000",
+                    background = "#ffffff",
+                    bordercolor = "#ffffff",
+                    relief = 'flat')
     style.layout('ContextFrame.TNotebook.Tab', [])
 
     return style

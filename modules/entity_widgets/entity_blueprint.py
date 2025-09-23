@@ -121,6 +121,6 @@ class EntityBlueprint(EntityWidget):
         self.build()
     
     def change_room(self, id: str):
-        self.state = False
         self.deselect_all()
-        pub.sendMessage(id, **dict(state = True, context_id = None))
+        pub.sendMessage(id, **dict(state = True, context_id = id))
+        self.build()

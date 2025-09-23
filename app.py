@@ -81,8 +81,12 @@ spareroom_poly = [(0,0),(310,0),(310,100),(270,100),(270,200),(0,200)]
 stair_down_arrow = [(310,50),(370,0),(370,30),(510,30),(510,70),(370,70),(370,100)]
 
 #blueprint widgets
-blueprint_f1 = EntityBlueprint(blueprint_menu, border = 10, size = 400, state_channel = "blueprint_f1", initial_state = True)
-blueprint_f2 = EntityBlueprint(blueprint_menu, border = 10, size = 400, state_channel = "blueprint_f2", initial_state = False)
+cf1 = ContextFrame(blueprint_menu, persistent = True)
+blueprint_f1 = EntityBlueprint(cf1.notebook, border = 10, size = 400)
+blueprint_f2 = EntityBlueprint(cf1.notebook, border = 10, size = 400)
+cf1.add_widget("blueprint_f1", blueprint_f1, selected = True)
+cf1.add_widget("blueprint_f2", blueprint_f2)
+cf1.grid(row = 0)
 
 #first floor
 blueprint_f1.add_body("hallway", hallway_poly)
@@ -94,8 +98,6 @@ for k,v in kitchen_decor.items(): blueprint_f1.add_body(k, v, type = 'decor')
 
 blueprint_f1.add_body("blueprint_f2", stair_up_arrow, type = 'navigate')
 
-blueprint_f1.grid(row = 0)
-
 #second floor
 blueprint_f2.add_body("landing", landing_poly)
 blueprint_f2.add_body("f2_stairs", landing_decor, type = 'decor')
@@ -105,8 +107,6 @@ blueprint_f2.add_body("bedroom", bedroom_poly)
 blueprint_f2.add_body("spareroom", spareroom_poly)
 
 blueprint_f2.add_body("blueprint_f1", stair_down_arrow, type = 'navigate')
-
-blueprint_f2.grid(row = 0)
 
 #blueprint switches
 def light_switchboard(master, entity_id: str, state_channel: str):
@@ -120,12 +120,12 @@ def light_switchboard(master, entity_id: str, state_channel: str):
 
     return(out)
 
-cf1 = ContextFrame(blueprint_menu)
-cf1.add_widget("lounge", light_switchboard(cf1.notebook, 'light.floor_lamp', "lounge"))
-cf1.add_widget("kitchen", light_switchboard(cf1.notebook, 'light.kitchen_light', "kitchen"))
-cf1.add_widget("office", light_switchboard(cf1.notebook, 'light.desk_light', "office"))
-cf1.add_widget("bedroom", light_switchboard(cf1.notebook, 'light.bedside_lamp', "bedroom"))
-cf1.grid(row = 1)
+cf2 = ContextFrame(blueprint_menu)
+cf2.add_widget("lounge", light_switchboard(cf2.notebook, 'light.floor_lamp', "lounge"))
+cf2.add_widget("kitchen", light_switchboard(cf2.notebook, 'light.kitchen_light', "kitchen"))
+cf2.add_widget("office", light_switchboard(cf2.notebook, 'light.desk_light', "office"))
+cf2.add_widget("bedroom", light_switchboard(cf2.notebook, 'light.bedside_lamp', "bedroom"))
+cf2.grid(row = 1)
 
 map_snap = EntityMapSnap(map_menu, ['person', 'zone'], size = 400)
 map_snap.pack()
