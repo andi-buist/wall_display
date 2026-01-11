@@ -1,4 +1,6 @@
 env/
-data/
-
 .cache/
+__pycache__/
+data/
+*.pyc
+*.pyo

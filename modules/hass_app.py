@@ -1,7 +1,7 @@
 from websocket import *
 import threading
 import tkinter as tk
-import queue
+from queue import Queue, Empty
 
 from modules.websocket_defs import *
 from modules.entity_widgets.core import *
@@ -11,7 +11,7 @@ class HASSApp(tk.Tk):
         tk.Tk.__init__(self)
         self.configure(bg = "#ffffff")
 
-        self.state_change_queue = queue.Queue()
+        self.state_change_queue = Queue()
         
         #start connections to sockets, UIDS 2,3
         threading.Thread(target = lambda socket_uid = 2: all_entities_socket(socket_uid, self.entity_dict_refresh)).start()
@@ -37,7 +37,7 @@ class HASSApp(tk.Tk):
     def state_change_periodic_check(self, period: int):
         try:
             self.state_refresh(self.state_change_queue.get(False)) # non-blocking
-        except queue.Empty:
+        except Empty:
             pass
         finally:
             self.after(period, self.state_change_periodic_check, period)

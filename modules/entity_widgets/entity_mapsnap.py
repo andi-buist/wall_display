@@ -1,6 +1,5 @@
 from tkinter import ttk
 from io import BytesIO
-import datetime
 import dateutil
 from PIL import Image, ImageTk, ImageEnhance
 import matplotlib

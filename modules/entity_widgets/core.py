@@ -2,7 +2,7 @@ import tkinter as tk
 from tkinter import ttk
 from PIL import Image, ImageTk
 import traceback
-from pubsub import *
+from pubsub import pub
 
 class EntityWidget(ttk.Frame):
     def __init__(self, master, widget_name,

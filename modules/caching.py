@@ -1,6 +1,6 @@
 import json
 import datetime
-import dateutil
+from pathlib import Path
 
 global global_entity_cache
 global_entity_cache = {}
@@ -21,9 +21,13 @@ def entity_cache_read(entity_id: str, key: str, fallback):
         return fallback
 
 def localcache_write(filepath: str, id: str, timestamp: float, value: any, hr_limit: int = None):
-    with open(filepath) as json_data:
-        history = json.load(json_data)
-        json_data.close()
+
+    if Path(filepath).is_file():
+        with open(filepath) as json_data:
+            history = json.load(json_data)
+            json_data.close()
+    else:
+        history = {}
     
     earliest_date = datetime.datetime.now() - datetime.timedelta(hours = hr_limit)
 
@@ -49,11 +53,15 @@ def localcache_write(filepath: str, id: str, timestamp: float, value: any, hr_li
             file_write.close()
     
 def localcache_read(filepath: str, id: str):
-    with open(filepath) as json_data:
-        history = json.load(json_data)
-        json_data.close()
 
-    if id in history.keys():
-        return history[id]
+    if Path(filepath).is_file():
+        with open(filepath) as json_data:
+            history = json.load(json_data)
+            json_data.close()
+
+        if id in history.keys():
+            return history[id]
+        else:
+            return {}
     else:
         return {}
