@@ -272,6 +272,8 @@ class HASSMap(HASSWidget):
     def plt_add_people(self, ax: plt.Axes, people: list[dict], label_offset: float, label_store: list) -> list:
         label_store = label_store
         for entity in people:
+            # TODO: separate out the person tracking & caching logic from the plotting logic so it is always running - same as what's done for astro
+            
             #get position history if present, else make, trim to most recent N and append current
             position_history = localcache_read("./data/person_position_log.json", entity['entity_id'])
             _current_position = [entity['attributes']['longitude'], entity['attributes']['latitude']]
