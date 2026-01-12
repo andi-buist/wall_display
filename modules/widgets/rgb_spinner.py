@@ -5,7 +5,7 @@ from io import BytesIO
 import webcolors
 import json
 
-from .core import *
+from .widget_core import *
 from ..caching import *
 from modules.websocket_defs import ThreadedWebsocket
 
@@ -15,12 +15,12 @@ with BytesIO(requests.get("https://xkcd.com/color/rgb.txt").content) as file:
 #remove 1st entry as this is the title, license, etc.
     xkcd_colours = dict([tuple(line.decode('utf-8').split("\t")[0:2]) for line in file][1:])
 
-class EntityRGBSpinners(EntityWidget):
+class EntityRGBSpinners(HASSWidget):
     def __init__(self, master, local_ws: ThreadedWebsocket,
                  entity_type: str | list[str] = None, entity_id: str | list[str] = None, 
                  state_channel: str | list[str] = [],
                  **kwargs):
-        EntityWidget.__init__(self=self, master=master, widget_name="entity_rgb_spinner",
+        HASSWidget.__init__(self=self, master=master, widget_name="entity_rgb_spinner",
                               entity_type=entity_type, entity_id=entity_id, 
                               state_channel=state_channel,
                               **kwargs)

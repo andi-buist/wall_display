@@ -1,116 +1,76 @@
-from websocket import *
-import tkinter as tk
+from PySide6 import QtCore, QtWebSockets
 import json
-import time
-import threading
 from config import hass_config
 
 HASS_WS_URL = hass_config['url']
 TOKEN = hass_config['secret']
 
-#define some helper functions that do things on connection - then, make connection, point to helpers, run forever **on thread**.
-#note: i suppose this could be where we diversify? start_connect could all be the same, but then the target lambda different dependent on use-case
-def state_change_socket(socket_uid: int, action: callable):
-    def on_open(ws: WebSocket):
-        ws.send(json.dumps({"type": "auth", "access_token": TOKEN}).encode('utf-8'))
-        print("state_change_socket opened:", ws)
-        ws.send(json.dumps({"id": socket_uid, "type": "subscribe_events", "event_type": "state_changed"}).encode('utf-8'))
+class HASSDataManager(QtCore.QObject):
+    entities_updated = QtCore.Signal(dict)  # Emitted when all entities are refreshed
+    entity_state_changed = QtCore.Signal(dict)  # Emitted when a single entity changes
+
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self.entities = {}  # entity_id -> entity dict
+
+        # Single websocket
+        self.ws = QtWebSockets.QWebSocket()
+
+        # Timer for periodic get_states
+        self._get_states_timer = QtCore.QTimer(self)
+        self._get_states_timer.setInterval(60000)
+        self._get_states_timer.timeout.connect(self.send_get_states)
+
+        # Connect signals
+        self.ws.connected.connect(self.on_connected)
+        self.ws.textMessageReceived.connect(self.on_message)
+
+        # Start connection
+        self.ws.open(QtCore.QUrl(HASS_WS_URL))
+
+        self._message_id = 2
+        self._get_states_id = None  # Track the last get_states message id
+
+    def on_connected(self):
+        # Authenticate
+        self.ws.sendTextMessage(json.dumps({"type": "auth", "access_token": TOKEN}))
+        # After a short delay, send get_states and subscribe to events
+        QtCore.QTimer.singleShot(1000, self.post_auth_setup)
+
+    def post_auth_setup(self):
+        self.send_get_states() # initial states fetch
+        self.subscribe_state_changes() # subscribe to state changes
+
+    def send_get_states(self):
+        self._message_id += 1
+        self._get_states_id = self._message_id
+        self.ws.sendTextMessage(json.dumps({"id": self._message_id, "type": "get_states"}))
+        self._get_states_timer.start()  # restart timer
+
+    def subscribe_state_changes(self):
+        self._message_id += 1
+        self.ws.sendTextMessage(json.dumps({
+            "id": self._message_id,
+            "type": "subscribe_events",
+            "event_type": "state_changed"
+        }))
     
-    def on_message(ws: WebSocket, message):
-        msg_dict: dict = json.loads(message)
-        print("state_change_socket message:", ws, msg_dict['event']['data']['new_state']['entity_id'])
-        action(msg_dict)
-        
-    def on_error(ws: WebSocket, error):
-        print("state_change_socket error:", ws, error)
+    # handles any outgoing traffic the user wants to orchestrate - use this to send messages to the websocket
+    def send_command(self, msg):
+        self._message_id += 1
+        msg['id'] = self._message_id
+        self.ws.sendTextMessage(json.dumps(msg))
 
-    def on_close(ws: WebSocket, *args):
-        print("state_change_socket closed:", *args)
+    # handles all incoming traffic - this is the automatic response to any action or update
+    def on_message(self, message):
+        msg_dict = json.loads(message)
 
-    """The main, looping functionality of the connect_to_socket function. Called at end of def."""
-    def main():
-        #enableTrace(True) # useful for watching events pass by. maybe print this to a live console? that would be quite cool!
-        ws = WebSocketApp(HASS_WS_URL,
-                        on_open = on_open, 
-                        on_message = on_message, 
-                        on_error = on_error, 
-                        on_close = on_close)
-        
-        # #attach a call to shut down threads when window closes, then close
-        # def on_window_close():
-        #     ws.close()
-        # window.protocol("WM_DELETE_WINDOW", on_window_close)
-
-        #runs forever on the thread!
-        ws.run_forever()
-    
-    main()
-
-#define some helper functions that do things on connection - then, make connection, point to helpers, run forever **on thread**.
-#note: i suppose this could be where we diversify? start_connect could all be the same, but then the target lambda different dependent on use-case
-def all_entities_socket(socket_uid: int, action: callable):
-    def on_open(ws: WebSocket):
-        def periodic_send():
-            message_id = 2
-            while True:
-                message_id += 1
-                ws.send(json.dumps({"id": message_id,"type": "get_states"}).encode('utf-8'))
-                time.sleep(60)
-        
-        ws.send(json.dumps({"type": "auth", "access_token": TOKEN}).encode('utf-8'))
-        print("all_entities_socket opened:", ws)
-
-        threading.Thread(target = periodic_send).start()
-    
-    def on_message(ws: WebSocket, message: dict):
-        print("all_entities_socket messaged:", ws) # don't print message, too large
-        msg_dict: dict = json.loads(message)
-        action(msg_dict)
-        
-    def on_error(ws: WebSocket, error):
-        print("all_entities_socket error:", ws, error)
-
-    def on_close(ws: WebSocket, *args):
-        print("all_entities_socket closed:", *args)
-
-    """The main, looping functionality of the connect_to_socket function. Called at end of def."""
-    def main():
-        #enableTrace(True) # useful for watching events pass by. maybe print this to a live console? that would be quite cool!
-        ws = WebSocketApp(HASS_WS_URL,
-                        on_open = on_open, 
-                        on_message = on_message, 
-                        on_error = on_error, 
-                        on_close = on_close)
-        
-        ws.run_forever()
-
-    main()
-
-class ThreadedWebsocket:
-    def __init__(self, socket_uid: int):
-        self.ws =  WebSocketApp(HASS_WS_URL,
-                        on_open = self.on_open,
-                        on_message = self.on_message,
-                        on_error = self.on_error, 
-                        on_close = self.on_close)
-        self.message_id = 2
-        self.permanent_thread = threading.Thread(target = self.ws.run_forever, daemon = True)
-        self.permanent_thread.start()
-
-    def on_open(self, ws):
-        self.ws.send(json.dumps({"type": "auth", "access_token": TOKEN}).encode('utf-8'))
-        print("local_socket opened:", ws)
-    
-    def on_message(self, ws, message):
-        print("local_socket messaged:", ws, message)
-
-    def on_error(self, ws, error):
-        print("local_socket error:", ws, error)
-
-    def on_close(self, ws, *args):
-        print("local_socket closed:", ws, *args)
-    
-    def send(self, message: dict):
-        message['id'] = self.message_id
-        self.ws.send(json.dumps(message).encode('utf-8'))
-        self.message_id += 1
+        # if type is "result", fetched all (direct request from timer)
+        if msg_dict.get('type') == "result" and msg_dict.get('id') == self._get_states_id:
+            self.entities = {x['entity_id']: x for x in msg_dict['result']}
+            self.entities_updated.emit(self.entities)
+        # if type is "event", is result of a subscribed state change
+        elif msg_dict.get('type') == "event" and msg_dict.get('event', {}).get('event_type') == "state_changed":
+            new_state = msg_dict['event']['data']['new_state']
+            self.entities[new_state['entity_id']] = new_state
+            self.entity_state_changed.emit(new_state)

@@ -1,4 +1,4 @@
-from .core import *
+from .widget_core import *
 from ..caching import *
 from ..websocket_defs import ThreadedWebsocket
 

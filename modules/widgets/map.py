@@ -1,7 +1,10 @@
-from tkinter import ttk
+from PySide6.QtWidgets import QWidget, QLabel, QPushButton, QVBoxLayout, QHBoxLayout
+from PySide6.QtGui import QPixmap, QImage
+from PySide6.QtCore import Qt
+
 from io import BytesIO
 import dateutil
-from PIL import Image, ImageTk, ImageEnhance
+from PIL import Image, ImageEnhance
 import matplotlib
 import matplotlib.pyplot as plt
 import matplotlib.patches as patches
@@ -13,75 +16,121 @@ from cartopy.io import img_tiles as ctiles
 import math
 
 from config import *
-from .core import *
+from .widget_core import *
 from ..caching import *
 from ..api.astronomy import *
 
 matplotlib.use('agg')
 cartopy.config['cache_dir'] = "./.cache/cartopy/"
 
-class EntityMapSnap(EntityWidget):
-    def __init__(self, master, 
-                 entity_type: str | list[str] = None, entity_id: str | list[str] = None, 
-                 state_channel: str | list[str] = [],
-                 **kwargs):
-        EntityWidget.__init__(self=self, master=master, widget_name="entity_mapsnap",
-                              entity_type=entity_type, entity_id=entity_id,
-                              state_channel=state_channel,
-                              foreach = False,
-                              **kwargs)
+class HASSMap(HASSWidget):
+    def __init__(self, data_manager, entity_type = ["person", "zone"], parent=None, **kwargs):
+        super().__init__(data_manager, entity_types=entity_type, entity_ids=None, parent=parent, **kwargs)
+
         self.map_focus = "all"
         self.overlay = "none"
 
+        self.mapsize = None
+        self.zones = []
+        self.people = []
 
-    def construct_widget(self, entity_id: str, entity_dict: dict, **kwargs):
-        widget = ttk.Frame(self)
+        # "kiosk" things can be latched to to slowly change visuals over time
+        self.kiosk_index = 0
+        self.kiosk_timer = QtCore.QTimer(self)
+        self.kiosk_timer.setInterval(3000)
+        self.kiosk_timer.timeout.connect(self.on_kiosk_timer_next)
 
-        if self.kwargs.get('size') is not None:
-            self.mapsize = self.kwargs.get('size')
-        else: raise KeyError("kwarg 'size' expected for class EntityMapSnap")
+        """Qt Setup"""
 
-        self.zones = [entity for id, entity in entity_dict.items() if 'zone' in id]
-        self.people = [entity for id, entity in entity_dict.items() if 'person' in id]
+        self.layout = QVBoxLayout(self)
+        self.setLayout(self.layout)
 
-        photo_image = self.generate_map(entity_id, entity_dict, **kwargs)
+        # Map image label
+        self.map_label = QLabel(self)
+        self.layout.addWidget(self.map_label)
 
-        map_widget = ttk.Label(widget, image = photo_image)
-        map_widget.image = photo_image
-        map_widget.grid(column=0, row=0, columnspan=2)
+        # Focus and overlay buttons
+        btn_layout = QHBoxLayout()
+        self.focus_button = QPushButton("Focus: All", self)
+        self.focus_button.clicked.connect(self.toggle_focus)
+        btn_layout.addWidget(self.focus_button)
 
-        focus_choice_list = ["all"] + [x for x in entity_dict.keys() if 'person' in x]
-        focus_choice_list_names = ["All"] + [x['attributes']['friendly_name'] for k,x in entity_dict.items() if 'person' in k]
+        self.overlay_button = QPushButton("Overlay: None", self)
+        self.overlay_button.clicked.connect(self.toggle_overlay)
+        btn_layout.addWidget(self.overlay_button)
 
-        focus_button = ttk.Button(widget,
-                                   command = lambda attr = 'map_focus', options = focus_choice_list: self.toggle_attr(attr, options),
-                                   text = "Focus: " + focus_choice_list_names[focus_choice_list.index(self.map_focus)])
-        focus_button.grid(column = 0, row = 1, sticky = 'nsew')
+        self.layout.addLayout(btn_layout)
 
-        overlay_choice_list = ["none", "astro"]
-        overlay_choice_names = ["None", "Astronomy"]
+        # Initial map render
+        self.update_map()
 
-        debug_button = ttk.Button(widget,
-                                   command = lambda attr = 'overlay', options = overlay_choice_list: self.toggle_attr(attr, options),
-                                   text = "Overlay: " + overlay_choice_names[overlay_choice_list.index(self.overlay)])
-        debug_button.grid(column = 1, row = 1, sticky = 'nsew')
+    def on_entities_update(self, entities):
+        # Update zones and people lists, then redraw map
+        self.zones = [entity for id, entity in entities.items() if 'zone' in id]
+        self.people = [entity for id, entity in entities.items() if 'person' in id]
+        self.update_map()
 
-        return widget
+    def on_entity_update(self, entity):
+        # Update a single entity and redraw map if relevant
+        self.on_entities_update(self.entities)
     
-    # get length of current people list, iterate through looping back to 0 at end, set as current focus
-    def toggle_attr(self, attr: str, options: list[str]):
-        new_option_index = (options.index(getattr(self, attr)) + 1) % len(options)
-        setattr(self, attr, options[new_option_index])
-        self.build()
+    def on_kiosk_timer_next(self):
+        self.kiosk_index += 1
+        self.update_map()
+
+    # Command invoked to toggle map focus (person)
+    def toggle_focus(self):
+        focus_options = ["all"] + [x['entity_id'] for x in self.people]
+        idx = focus_options.index(self.map_focus) if self.map_focus in focus_options else 0
+        self.map_focus = focus_options[(idx + 1) % len(focus_options)]
+        self.focus_button.setText(f"Focus: {self.map_focus.title() if self.map_focus != 'all' else 'All'}")
+        self.update_map()
+
+    # Command invoked to toggle map overlay
+    def toggle_overlay(self):
+        overlay_options = ["none", "astro", "sun-moon"]
+        idx = overlay_options.index(self.overlay)
+        self.overlay = overlay_options[(idx + 1) % len(overlay_options)]
+        self.overlay_button.setText(f"Overlay: {self.overlay.title()}")
+
+        if self.overlay == "astro":
+            self.kiosk_index = 0
+            self.kiosk_timer.start()
+
+        self.update_map()
+
+    def update_map(self):
+        parent = self.parentWidget()
+        if parent:
+            self.mapsize = int(min((parent.width(), parent.height())) * 0.8)
+        else:
+            self.mapsize = 128
+
+        pil_img = self.generate_map()
+
+        if not pil_img:
+            # generic image as a placeholder (when no data)
+            image = Image.open(common_image_paths["globe"])
+            image = image.resize((self.mapsize, self.mapsize), resample= Image.Resampling.NEAREST)
+            image = image.convert('1')
+            pil_img = image
+
+        data = BytesIO()
+        pil_img.save(data, format="PNG")
+        qimg = QImage.fromData(data.getvalue())
+        pixmap = QPixmap.fromImage(qimg)
+        self.map_label.setPixmap(pixmap)
     
-    def generate_map(self, entity_id: str, entity_dict: dict, **kwargs):
+    def generate_map(self, **kwargs) -> Image:
         zones = self.zones
         people = self.people
-        _size = self.mapsize
 
-        #if focus is a person
-        if self.map_focus in entity_dict.keys():
-            people = [entity for id, entity in entity_dict.items() if self.map_focus in id]
+        if len(zones) == 0 and len(people) == 0:
+            return None
+
+        # if focus is a person, filter people to that person, else (probably "All"), do nothing
+        if self.map_focus in self.entities.keys():
+            people = [entity for id, entity in self.entities.items() if self.map_focus in id]
 
         
         """Calculating map extent"""
@@ -112,7 +161,7 @@ class EntityMapSnap(EntityWidget):
         plt.rcParams['font.family'] = "Nintendo DS BIOS"
         
         """---First plot cycle: used to fetch tiles, apply enhancements, save to image. Used as bg of second plot cycle---"""
-        map_bg = self.get_map_image(_size, extent, map_dimension, _minimum_aspect, 96, 0.75)
+        map_bg = self.get_map_image(self.mapsize, extent, map_dimension, _minimum_aspect, 128, 1)
         """---End of first plot cycle---"""
 
         """---Second plot cycle---"""
@@ -129,7 +178,7 @@ class EntityMapSnap(EntityWidget):
             case "none":
                 label_store = self.plt_add_zones(ax, zones, -map_buffer, label_store)
                 label_store = self.plt_add_people(ax, people, map_buffer, label_store)
-            case "astro":
+            case "astro"|"sun-moon":
                 self.plt_add_astronomy(fig, ax, lonlat_centroid, extent, (map_dimension/2) + (map_buffer/2)) # +map buffer would have circle perfectly fit square, but we want some allowance for icons
     
         adjust_text(label_store, arrowprops=dict(arrowstyle = '-', color = "#000000", linewidth = 3, zorder = 2))
@@ -140,14 +189,12 @@ class EntityMapSnap(EntityWidget):
         plt.close()
 
         image = Image.open(image_buffer)
-        image = image.resize((_size, _size), resample= Image.Resampling.NEAREST)
+        image = image.resize((self.mapsize, self.mapsize), resample= Image.Resampling.NEAREST)
         image = image.convert('1')
 
-        photo_image = ImageTk.PhotoImage(image)
-
-        return photo_image
+        return image
     
-    def get_map_image(self, size: int, extent: list, aspect: float, min_aspect: float, brightness: float, contrast: float):
+    def get_map_image(self, size: int, extent: list, aspect: float, min_aspect: float, brightness: float, contrast: float) -> Image:
         match math.floor(math.log2(aspect / min_aspect)):
             case 0: _zoom_level = 17
             case 1: _zoom_level = 16
@@ -188,7 +235,7 @@ class EntityMapSnap(EntityWidget):
         #pull up brightness by mapping [0,255] -> [n,255]
         return ImageEnhance.Contrast(Image.merge(map_bg.mode, [x.point(lambda i: i + ((1 - (i/255)) * brightness)) for x in map_bg.split()])).enhance(contrast)
     
-    def plt_add_zones(self, ax: plt.Axes, zones: list[dict], label_offset: float, label_store: list):
+    def plt_add_zones(self, ax: plt.Axes, zones: list[dict], label_offset: float, label_store: list) -> list:
         label_store = label_store
         for entity in zones:
             if len(entity['attributes']['persons']) > 0:
@@ -219,7 +266,7 @@ class EntityMapSnap(EntityWidget):
                         zorder = 2)
         return label_store
     
-    def plt_add_people(self, ax: plt.Axes, people: list[dict], label_offset: float, label_store: list):
+    def plt_add_people(self, ax: plt.Axes, people: list[dict], label_offset: float, label_store: list) -> list:
         label_store = label_store
         for entity in people:
             #get position history if present, else make, trim to most recent N and append current
@@ -269,20 +316,40 @@ class EntityMapSnap(EntityWidget):
                     zorder = 1)
         return label_store
     
-    def plt_add_astronomy(self, fig: plt.Figure, ax: plt.Axes, lon_lat: tuple, extent: list, max_radius: float):
-        def alt_az_to_viewport(alt_az: tuple):
-            #convert to lon lat at origin where circle bounds viewport square
-            conversion = [math.sin(alt_az[1]), math.cos(alt_az[1])] 
-            conversion = [x * (1 - (alt_az[0]/math.radians(90))) * max_radius for x in conversion]
-
-            #move from origin to viewport centre
-            conversion = [sum(x) for x in zip(lon_lat, conversion)]
-            #clamp to within viewport square
-            conversion = (min(max(conversion[0], extent[0]), extent[1]), min(max(conversion[1], extent[2]), extent[3]))
-
-            return conversion
-
+    def plt_add_astronomy(self, fig: plt.Figure, ax: plt.Axes, lon_lat: tuple, extent: list, max_radius: float) -> None:
+        # create a list of permitted celestial bodies
+        match self.overlay:
+                case "astro":
+                    allowed_bodies = ['sun', 'moon', 'mercury', 'venus', 'mars', 'jupiter', 'saturn', 'uranus', 'neptune']
+                case "sun-moon":
+                    allowed_bodies = ['sun', 'moon']
+                case _:
+                    allowed_bodies = []
+                    
+        # data fetch from api
         astro_data = get_astro_data(lon_lat, astronomy_config["id"], astronomy_config["secret"])
+        astro_data = [body for body in astro_data if body['id'] in allowed_bodies]
+
+        # convert altitude & azimuth to radians
+        astro_data = [{**body, 
+                       "alt_az": 
+                       (math.radians(float(body['position']['horizontal']['altitude']['degrees'])), 
+                        math.radians(float(body['position']['horizontal']['azimuth']['degrees'])))
+                        } for body in astro_data]
+        
+        # filter to above horizon
+        astro_data = [body for body in astro_data if body['alt_az'][0] > 0]
+        
+        # reset kiosk index if past final set
+        if self.kiosk_index >= (len(astro_data) + 1):
+            self.kiosk_index = 0
+
+        # mods for kiosk plotting
+        astro_data = [{**e, 
+                       "kiosk_selected":
+                       True if idx == (self.kiosk_index - 1)
+                       else False,
+                       } for idx, e in enumerate(astro_data)]
 
         ax.axvline(x = lon_lat[0], color = "#000000")
         ax.axhline(y = lon_lat[1], color = "#000000")
@@ -290,24 +357,51 @@ class EntityMapSnap(EntityWidget):
 
         legend_text = ""
 
-        for body in astro_data:
-            if body['id'] in ['sun', 'moon', 'mercury', 'venus', 'mars', 'jupiter', 'saturn', 'uranus', 'neptune']:
-                #get altitude and azimuth
+        astro_markers = []
 
-                alt_az = (math.radians(float(body['position']['horizontal']['altitude']['degrees'])), 
-                        math.radians(float(body['position']['horizontal']['azimuth']['degrees'])))
-                
-                # above/on horizon
-                if alt_az[0] >= 0:
-                    conversion = alt_az_to_viewport(alt_az)
+        for idx, body in enumerate(astro_data):
+            conversion = self.alt_az_to_viewport(body['alt_az'], lon_lat, extent, max_radius)
 
-                    astro_icon = OffsetImage(plt.imread("./theme/ui/icons/astro/" + body['id'] + ".png"), zoom = 1.5, interpolation = 'nearest')
-                    astro_marker = AnnotationBbox(astro_icon, conversion, frameon = False, annotation_clip = True)
-                    astro_marker.set_clip_on(True)
-                    ax.add_artist(astro_marker)
+            if self.kiosk_index == 0:
+                is_focus = False
+                zoom_level = 0.2
+                focused_str = "   "
+            elif self.kiosk_index == (idx + 1):
+                is_focus = True
+                zoom_level = 0.35
+                focused_str = "<<<"
+            else:
+                is_focus = False
+                zoom_level = 0.1
+                focused_str = "   "
 
-                    if len(legend_text) > 0: legend_text = legend_text + "\n"
-                    legend_text = legend_text + body['name'] + ": " + str(round(float(body['position']['horizontal']['altitude']['degrees']), 1)) + ", " + str(round(float(body['position']['horizontal']['azimuth']['degrees']), 1))
+            match body['id']:
+                case 'moon':
+                    try:
+                        # moon phase icon fetch
+                        astro_icon = plt.imread("./theme/ui/icons/astro/moon_" + body['extraInfo']['phase']['string'].replace(" ", "_").lower() + ".png")
+                    except:
+                        # api returned unknown phase, show the confused moon!
+                        astro_icon = plt.imread("./theme/ui/icons/astro/moon_bug.png")
+                case _:
+                    astro_icon = plt.imread("./theme/ui/icons/astro/" + body['id'] + ".png")
+
+            astro_icon_image = OffsetImage(astro_icon, zoom = zoom_level, interpolation = 'bicubic')
+            astro_marker = AnnotationBbox(astro_icon_image, conversion, frameon = False, annotation_clip = True)
+            astro_marker.set_clip_on(True)
+
+            # add markers to list to render later - focal element last
+            if is_focus:
+                astro_markers.append(astro_marker)
+            else:
+                astro_markers.insert(0, astro_marker)
+
+            if len(legend_text) > 0: legend_text = legend_text + "\n"
+            legend_text = legend_text + body['name'] + ": " + str(round(float(body['position']['horizontal']['altitude']['degrees']), 1)) + ", " + str(round(float(body['position']['horizontal']['azimuth']['degrees']), 1)) + focused_str
+
+        # render marker list
+        for astro_marker in astro_markers:
+            ax.add_artist(astro_marker)
 
         props = dict(alpha = 1, edgecolor = "#000000", facecolor = "#ffffff")
         ax.text(0.025, 
@@ -318,6 +412,18 @@ class EntityMapSnap(EntityWidget):
                 verticalalignment = 'top',
                 bbox = props)
 
+    def alt_az_to_viewport(self, alt_az: tuple, lon_lat: tuple, extent: list, max_radius: float):
+                #convert to lon lat at origin where circle bounds viewport square
+                conversion = [math.sin(alt_az[1]), math.cos(alt_az[1])] 
+                conversion = [x * (1 - (alt_az[0]/math.radians(90))) * max_radius for x in conversion]
+
+                #move from origin to viewport centre
+                conversion = [sum(x) for x in zip(lon_lat, conversion)]
+                #clamp to within viewport square
+                conversion = (min(max(conversion[0], extent[0]), extent[1]), min(max(conversion[1], extent[2]), extent[3]))
+
+                return conversion
+    
     def filter_entities_to_extent(self, entity_list: list[dict], extent: list):
         return [x for x in entity_list if 
          x['attributes']['longitude'] >= extent[0] and 
