@@ -24,8 +24,8 @@ matplotlib.use('agg')
 cartopy.config['cache_dir'] = "./.cache/cartopy/"
 
 class HASSMap(HASSWidget):
-    def __init__(self, data_manager, entity_type = ["person", "zone"], parent=None, **kwargs):
-        super().__init__(data_manager, entity_types=entity_type, entity_ids=None, parent=parent, **kwargs)
+    def __init__(self, data_manager, parent=None):
+        super().__init__(data_manager, entity_types=["person", "zone"], entity_ids=None, parent=parent)
 
         self.map_focus = "all"
         self.overlay = "none"
@@ -88,7 +88,7 @@ class HASSMap(HASSWidget):
 
     # Command invoked to toggle map overlay
     def toggle_overlay(self):
-        overlay_options = ["none", "astro", "sun-moon"]
+        overlay_options = ["none", "astro"]
         idx = overlay_options.index(self.overlay)
         self.overlay = overlay_options[(idx + 1) % len(overlay_options)]
         self.overlay_button.setText(f"Overlay: {self.overlay.title()}")
@@ -173,13 +173,16 @@ class HASSMap(HASSWidget):
 
         label_store = []
 
+        """Get astro data (whether in astro overlay or not)"""
+        astro_data =  self.get_astronomy_data(astronomy_lon_lat) # uses known location to fetch to prevent weird drift in cached logs
+
         """Match case for the current display mode"""
         match self.overlay:
             case "none":
                 label_store = self.plt_add_zones(ax, zones, -map_buffer, label_store)
                 label_store = self.plt_add_people(ax, people, map_buffer, label_store)
-            case "astro"|"sun-moon":
-                self.plt_add_astronomy(fig, ax, lonlat_centroid, extent, (map_dimension/2) + (map_buffer/2)) # +map buffer would have circle perfectly fit square, but we want some allowance for icons
+            case "astro":
+                self.plt_add_astronomy(astro_data, fig, ax, lonlat_centroid, extent, (map_dimension/2) + (map_buffer/2)) # +map buffer would have circle perfectly fit square, but we want some allowance for icons
     
         adjust_text(label_store, arrowprops=dict(arrowstyle = '-', color = "#000000", linewidth = 3, zorder = 2))
         """---End of second plot cycle---"""
@@ -276,6 +279,8 @@ class HASSMap(HASSWidget):
             if len(position_history) > 0:
                 _latest_parsed_datetime = max(position_history.keys())
                 _latest_position = position_history[_latest_parsed_datetime]
+            else:
+                _latest_position = None
 
             if len(position_history) == 0 or _current_position != _latest_position:
                 localcache_write("./data/person_position_log.json",
@@ -316,30 +321,43 @@ class HASSMap(HASSWidget):
                     zorder = 1)
         return label_store
     
-    def plt_add_astronomy(self, fig: plt.Figure, ax: plt.Axes, lon_lat: tuple, extent: list, max_radius: float) -> None:
+    def get_astronomy_data(self, lon_lat: tuple):
         # create a list of permitted celestial bodies
-        match self.overlay:
-                case "astro":
-                    allowed_bodies = ['sun', 'moon', 'mercury', 'venus', 'mars', 'jupiter', 'saturn', 'uranus', 'neptune']
-                case "sun-moon":
-                    allowed_bodies = ['sun', 'moon']
-                case _:
-                    allowed_bodies = []
+        allowed_bodies = ['sun', 'moon', 'mercury', 'venus', 'mars', 'jupiter', 'saturn', 'uranus', 'neptune']
                     
         # data fetch from api
         astro_data = get_astro_data(lon_lat, astronomy_config["id"], astronomy_config["secret"])
         astro_data = [body for body in astro_data if body['id'] in allowed_bodies]
 
-        # convert altitude & azimuth to radians
+        # convert altitude & azimuth to radians (added rounding because it was overly-specific)
         astro_data = [{**body, 
                        "alt_az": 
-                       (math.radians(float(body['position']['horizontal']['altitude']['degrees'])), 
-                        math.radians(float(body['position']['horizontal']['azimuth']['degrees'])))
+                       (round(math.radians(float(body['position']['horizontal']['altitude']['degrees'])), 2), 
+                        round(math.radians(float(body['position']['horizontal']['azimuth']['degrees'])), 2))
                         } for body in astro_data]
         
         # filter to above horizon
         astro_data = [body for body in astro_data if body['alt_az'][0] > 0]
-        
+
+        # read/write position history
+        for body in astro_data:
+            position_history = localcache_read("./data/astro_position_log.json", body['id'])
+
+            if len(position_history) > 0:
+                _latest_parsed_datetime = max(position_history.keys())
+                _latest_position = position_history[_latest_parsed_datetime]
+            else:
+                _latest_position = None
+
+            if len(position_history) == 0 or list(body['alt_az']) != _latest_position: # json will not return a tuple back, only list
+                localcache_write("./data/astro_position_log.json",
+                                    body['id'],
+                                    dateutil.parser.parse(body['date']).timestamp(),
+                                    body['alt_az'],
+                                    24) # assign back
+        return astro_data
+
+    def plt_add_astronomy(self, astro_data: list[dict], fig: plt.Figure, ax: plt.Axes, lon_lat: tuple, extent: list, max_radius: float) -> None:
         # reset kiosk index if past final set
         if self.kiosk_index >= (len(astro_data) + 1):
             self.kiosk_index = 0
@@ -351,6 +369,7 @@ class HASSMap(HASSWidget):
                        else False,
                        } for idx, e in enumerate(astro_data)]
 
+        # plot crosshair
         ax.axvline(x = lon_lat[0], color = "#000000")
         ax.axhline(y = lon_lat[1], color = "#000000")
         ax.add_patch(patches.Circle(lon_lat, max_radius, edgecolor = "#000000", facecolor = "none"))
@@ -374,6 +393,15 @@ class HASSMap(HASSWidget):
                 is_focus = False
                 zoom_level = 0.1
                 focused_str = "   "
+            
+            # read position history
+            position_history = localcache_read("./data/astro_position_log.json", body['id'])
+            position_history = [self.alt_az_to_viewport(alt_az, lon_lat, extent, max_radius) for alt_az in position_history.values()]
+
+            ax.plot(*zip(*position_history),
+                color = "#2a2a2a",
+                linewidth = 2,
+                zorder = 1)
 
             match body['id']:
                 case 'moon':
