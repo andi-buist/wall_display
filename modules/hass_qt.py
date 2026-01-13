@@ -1,20 +1,29 @@
 from PySide6 import QtCore, QtWidgets, QtGui
-from queue import Queue, Empty
+from websocket import *
 
 from modules.websocket_defs import *
 from modules.widgets.buttons import *
 from modules.widgets.map import *
+import theme
 
-class HASSApp(QtWidgets.QMainWindow):
-    def __init__(self, data_manager: HASSDataManager):
-        QtWidgets.QMainWindow.__init__(self)
+class HASSApp(QtWidgets.QApplication):
+    def __init__(self):
+        QtWidgets.QApplication.__init__(self)
 
-        self.data_manager = data_manager
+        self.setFont(theme.global_font)
+
+        self.data_manager = HASSDataManager()
+
+        self.window = QtWidgets.QMainWindow()
+
+        self.window.setFixedWidth(800)
+        self.window.setFixedHeight(480)
+
         self.data_manager.entities_updated.connect(self.on_entities_updated)
         self.data_manager.entity_state_changed.connect(self.on_entity_state_changed)
 
-        central_widget = QtWidgets.QWidget(self)
-        self.setCentralWidget(central_widget)
+        central_widget = QtWidgets.QWidget(self.window)
+        self.window.setCentralWidget(central_widget)
         layout = QtWidgets.QHBoxLayout(central_widget)
 
         light_switch = SingleEntityButton(self.data_manager, 
@@ -36,6 +45,8 @@ class HASSApp(QtWidgets.QMainWindow):
         self.stack.addWidget(light_switch)
         self.stack.addWidget(map)
         layout.addWidget(self.stack)
+
+        self.window.show()
     
     # These are mostly here for debug. Can be removed/deactivated and run silently in widgets
     def on_entities_updated(self, entities):

@@ -337,7 +337,7 @@ class HASSMap(HASSWidget):
         return label_store
     
     def get_astronomy_data(self, lon_lat: tuple):
-        print(datetime.datetime.now(), " got astro data!")
+        #print(datetime.datetime.now(), " got astro data!")
 
         # create a list of permitted celestial bodies
         allowed_bodies = ['sun', 'moon', 'mercury', 'venus', 'mars', 'jupiter', 'saturn', 'uranus', 'neptune']
@@ -367,14 +367,15 @@ class HASSMap(HASSWidget):
                 _latest_position = None
 
             if len(position_history) == 0 or list(body['alt_az']) != _latest_position: # json will not return a tuple back, only list
-                print(body['id'], ": ", body['alt_az'])
+                #print(body['id'], ": ", body['alt_az'])
                 localcache_write("./data/astro_position_log.json",
                                     body['id'],
                                     dateutil.parser.parse(body['date']).timestamp(),
                                     body['alt_az'],
                                     24) # assign back
             else:
-                print(body['id'], ": no changes...")
+                #print(body['id'], ": no changes...")
+                pass
         return astro_data
 
     def plt_add_astronomy(self, astro_data: list[dict], fig: plt.Figure, ax: plt.Axes, lon_lat: tuple, extent: list, max_radius: float) -> None:
@@ -405,22 +406,28 @@ class HASSMap(HASSWidget):
                 is_focus = False
                 zoom_level = 0.2
                 focused_str = "   "
+                line_color = "#666666"
+                line_width = 2
             elif self.kiosk_index == (idx + 1):
                 is_focus = True
                 zoom_level = 0.35
                 focused_str = "<<<"
+                line_color = "#2a2a2a"
+                line_width = 3
             else:
                 is_focus = False
                 zoom_level = 0.1
                 focused_str = "   "
+                line_color = "#999999"
+                line_width = 1
             
             # read position history
             position_history = localcache_read("./data/astro_position_log.json", body['id'])
             position_history = [self.alt_az_to_viewport(alt_az, lon_lat, extent, max_radius) for alt_az in position_history.values()]
 
             ax.plot(*zip(*position_history),
-                color = "#2a2a2a",
-                linewidth = 2,
+                color = line_color,
+                linewidth = line_width,
                 zorder = 1)
 
             match body['id']:
