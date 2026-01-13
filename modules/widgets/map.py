@@ -354,14 +354,14 @@ class HASSMap(HASSWidget):
                 _latest_position = None
 
             if len(position_history) == 0 or list(body['alt_az']) != _latest_position: # json will not return a tuple back, only list
-                print(body['id'] + ": " + body['alt_az'])
+                print(body['id'], ": ", body['alt_az'])
                 localcache_write("./data/astro_position_log.json",
                                     body['id'],
                                     dateutil.parser.parse(body['date']).timestamp(),
                                     body['alt_az'],
                                     24) # assign back
             else:
-                print(body['id'] + ": no changes...")
+                print(body['id'], ": no changes...")
         return astro_data
 
     def plt_add_astronomy(self, astro_data: list[dict], fig: plt.Figure, ax: plt.Axes, lon_lat: tuple, extent: list, max_radius: float) -> None:
