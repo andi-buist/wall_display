@@ -37,7 +37,7 @@ class HASSMap(HASSWidget):
         # "kiosk" things can be latched to to slowly change visuals over time
         self.kiosk_index = 0
         self.kiosk_timer = QtCore.QTimer(self)
-        self.kiosk_timer.setInterval(3000)
+        self.kiosk_timer.setInterval(10000)
         self.kiosk_timer.timeout.connect(self.on_kiosk_timer_next)
 
         """Qt Setup"""
@@ -68,12 +68,25 @@ class HASSMap(HASSWidget):
         # Update zones and people lists, then redraw map
         self.zones = [entity for id, entity in entities.items() if 'zone' in id]
         self.people = [entity for id, entity in entities.items() if 'person' in id]
+        self.astro_data =  self.get_astronomy_data(astronomy_lon_lat) # uses known location to fetch to prevent weird drift in cached logs
         self.update_map()
 
     def on_entity_update(self, entity):
         # Update a single entity and redraw map if relevant
         self.on_entities_update(self.entities)
     
+    # hijacking show/hide to start/stop the kiosk timer
+    def showEvent(self, event):
+        self.kiosk_index = 0
+        self.kiosk_timer.start()
+        super().showEvent(event)
+    
+    def hideEvent(self, event):
+        self.kiosk_index = 0
+        self.kiosk_timer.stop()
+        super().hideEvent(event)
+
+    # when kiosk timer triggers, tick index up, update map
     def on_kiosk_timer_next(self):
         self.kiosk_index += 1
         self.update_map()
@@ -96,6 +109,9 @@ class HASSMap(HASSWidget):
         if self.overlay == "astro":
             self.kiosk_index = 0
             self.kiosk_timer.start()
+        else:
+            self.kiosk_index = 0
+            self.kiosk_timer.stop()
 
         self.update_map()
 
@@ -172,17 +188,14 @@ class HASSMap(HASSWidget):
         ax.imshow(map_bg, extent = extent)
 
         label_store = []
-
-        """Get astro data (whether in astro overlay or not)"""
-        astro_data =  self.get_astronomy_data(astronomy_lon_lat) # uses known location to fetch to prevent weird drift in cached logs
-
+        
         """Match case for the current display mode"""
         match self.overlay:
             case "none":
                 label_store = self.plt_add_zones(ax, zones, -map_buffer, label_store)
                 label_store = self.plt_add_people(ax, people, map_buffer, label_store)
             case "astro":
-                self.plt_add_astronomy(astro_data, fig, ax, lonlat_centroid, extent, (map_dimension/2) + (map_buffer/2)) # +map buffer would have circle perfectly fit square, but we want some allowance for icons
+                self.plt_add_astronomy(self.astro_data, fig, ax, lonlat_centroid, extent, (map_dimension/2) + (map_buffer/2)) # +map buffer would have circle perfectly fit square, but we want some allowance for icons
     
         adjust_text(label_store, arrowprops=dict(arrowstyle = '-', color = "#000000", linewidth = 3, zorder = 2))
         """---End of second plot cycle---"""
