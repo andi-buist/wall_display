@@ -10,7 +10,6 @@ class SingleEntityButton(HASSWidget):
         # Layout setup, etc.
 
     def on_entity_update(self, entity):
-        print(entity)
         # Update button text, color, etc. based on entity state
         self.button.setText(entity['attributes'].get('friendly_name', entity['entity_id']))
         # Example: change color if light is on/off
@@ -32,7 +31,5 @@ class SingleEntityButton(HASSWidget):
         else:
             msg_template['service'] = "turn_on"
             msg_template['service_data'] = dict(brightness = 255)
-
-        print(msg_template)
 
         self.data_manager.send_command(msg_template)

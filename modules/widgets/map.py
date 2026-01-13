@@ -273,7 +273,7 @@ class HASSMap(HASSWidget):
         label_store = label_store
         for entity in people:
             # TODO: separate out the person tracking & caching logic from the plotting logic so it is always running - same as what's done for astro
-            
+
             #get position history if present, else make, trim to most recent N and append current
             position_history = localcache_read("./data/person_position_log.json", entity['entity_id'])
             _current_position = [entity['attributes']['longitude'], entity['attributes']['latitude']]
@@ -324,6 +324,8 @@ class HASSMap(HASSWidget):
         return label_store
     
     def get_astronomy_data(self, lon_lat: tuple):
+        print(datetime.datetime.now(), " got astro data!")
+
         # create a list of permitted celestial bodies
         allowed_bodies = ['sun', 'moon', 'mercury', 'venus', 'mars', 'jupiter', 'saturn', 'uranus', 'neptune']
                     
@@ -352,11 +354,14 @@ class HASSMap(HASSWidget):
                 _latest_position = None
 
             if len(position_history) == 0 or list(body['alt_az']) != _latest_position: # json will not return a tuple back, only list
+                print(body['id'] + ": " + body['alt_az'])
                 localcache_write("./data/astro_position_log.json",
                                     body['id'],
                                     dateutil.parser.parse(body['date']).timestamp(),
                                     body['alt_az'],
                                     24) # assign back
+            else:
+                print(body['id'] + ": no changes...")
         return astro_data
 
     def plt_add_astronomy(self, astro_data: list[dict], fig: plt.Figure, ax: plt.Axes, lon_lat: tuple, extent: list, max_radius: float) -> None:
