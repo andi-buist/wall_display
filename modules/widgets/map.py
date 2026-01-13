@@ -27,10 +27,11 @@ class HASSMap(HASSWidget):
     def __init__(self, data_manager, parent=None):
         super().__init__(data_manager, entity_types=["person", "zone"], entity_ids=None, parent=parent)
 
+        self.mapsize = None
+
         self.map_focus = "all"
         self.overlay = "none"
 
-        self.mapsize = None
         self.zones = []
         self.people = []
 
@@ -42,24 +43,25 @@ class HASSMap(HASSWidget):
 
         """Qt Setup"""
 
-        self.layout = QVBoxLayout(self)
-        self.setLayout(self.layout)
+        layout = QVBoxLayout(self)
+        map_layout = QVBoxLayout()
+        button_layout = QHBoxLayout()
+        layout.addLayout(map_layout)
+        layout.addLayout(button_layout)
 
         # Map image label
         self.map_label = QLabel(self)
-        self.layout.addWidget(self.map_label)
+        self.map_label.setAlignment(QtCore.Qt.AlignCenter)
+        map_layout.addWidget(self.map_label)
 
         # Focus and overlay buttons
-        btn_layout = QHBoxLayout()
         self.focus_button = QPushButton("Focus: All", self)
         self.focus_button.clicked.connect(self.toggle_focus)
-        btn_layout.addWidget(self.focus_button)
+        button_layout.addWidget(self.focus_button)
 
         self.overlay_button = QPushButton("Overlay: None", self)
         self.overlay_button.clicked.connect(self.toggle_overlay)
-        btn_layout.addWidget(self.overlay_button)
-
-        self.layout.addLayout(btn_layout)
+        button_layout.addWidget(self.overlay_button)
 
         # Initial map render
         self.update_map()
@@ -96,7 +98,7 @@ class HASSMap(HASSWidget):
         focus_options = ["all"] + [x['entity_id'] for x in self.people]
         idx = focus_options.index(self.map_focus) if self.map_focus in focus_options else 0
         self.map_focus = focus_options[(idx + 1) % len(focus_options)]
-        self.focus_button.setText(f"Focus: {self.map_focus.title() if self.map_focus != 'all' else 'All'}")
+        self.focus_button.setText(f"Focus: {self.map_focus.title()}")
         self.update_map()
 
     # Command invoked to toggle map overlay
@@ -118,9 +120,9 @@ class HASSMap(HASSWidget):
     def update_map(self):
         parent = self.parentWidget()
         if parent:
-            self.mapsize = int(min((parent.width(), parent.height())) * 0.8)
+            self.mapsize = int(min((parent.width(), parent.height())) * 0.9)
         else:
-            self.mapsize = 128
+            self.mapsize = 1
 
         pil_img = self.generate_map()
 
@@ -379,93 +381,109 @@ class HASSMap(HASSWidget):
         return astro_data
 
     def plt_add_astronomy(self, astro_data: list[dict], fig: plt.Figure, ax: plt.Axes, lon_lat: tuple, extent: list, max_radius: float) -> None:
-        # reset kiosk index if past final set
-        if self.kiosk_index >= (len(astro_data) + 1):
-            self.kiosk_index = 0
 
-        # mods for kiosk plotting
-        astro_data = [{**e, 
-                       "kiosk_selected":
-                       True if idx == (self.kiosk_index - 1)
-                       else False,
-                       } for idx, e in enumerate(astro_data)]
+        if len(astro_data) > 0:
+            # reset kiosk index if past final set
+            if self.kiosk_index >= (len(astro_data) + 1):
+                self.kiosk_index = 0
 
-        # plot crosshair
-        ax.axvline(x = lon_lat[0], color = "#000000")
-        ax.axhline(y = lon_lat[1], color = "#000000")
-        ax.add_patch(patches.Circle(lon_lat, max_radius, edgecolor = "#000000", facecolor = "none"))
-
-        legend_text = ""
-
-        astro_markers = []
-
-        for idx, body in enumerate(astro_data):
-            conversion = self.alt_az_to_viewport(body['alt_az'], lon_lat, extent, max_radius)
-
-            if self.kiosk_index == 0:
-                is_focus = False
-                zoom_level = 0.2
-                focused_str = "   "
-                line_color = "#666666"
-                line_width = 2
-            elif self.kiosk_index == (idx + 1):
-                is_focus = True
-                zoom_level = 0.35
-                focused_str = "<<<"
-                line_color = "#2a2a2a"
-                line_width = 3
-            else:
-                is_focus = False
-                zoom_level = 0.1
-                focused_str = "   "
-                line_color = "#999999"
-                line_width = 1
+            # mods for kiosk plotting
+            astro_data = [{**e, 
+                        "kiosk_selected":
+                        True if idx == (self.kiosk_index - 1)
+                        else False,
+                        } for idx, e in enumerate(astro_data)]
             
-            # read position history
-            position_history = localcache_read("./data/astro_position_log.json", body['id'])
-            position_history = [self.alt_az_to_viewport(alt_az, lon_lat, extent, max_radius) for alt_az in position_history.values()]
+            # plot crosshair
+            ax.axvline(x = lon_lat[0], color = "#000000")
+            ax.axhline(y = lon_lat[1], color = "#000000")
+            ax.add_patch(patches.Circle(lon_lat, max_radius, edgecolor = "#000000", facecolor = "none"))
 
-            ax.plot(*zip(*position_history),
-                color = line_color,
-                linewidth = line_width,
-                zorder = 1)
+            legend_text = ""
 
-            match body['id']:
-                case 'moon':
-                    try:
-                        # moon phase icon fetch
-                        astro_icon = plt.imread("./theme/ui/icons/astro/moon_" + body['extraInfo']['phase']['string'].replace(" ", "_").lower() + ".png")
-                    except:
-                        # api returned unknown phase, show the confused moon!
-                        astro_icon = plt.imread("./theme/ui/icons/astro/moon_bug.png")
-                case _:
-                    astro_icon = plt.imread("./theme/ui/icons/astro/" + body['id'] + ".png")
+            astro_markers = []
 
-            astro_icon_image = OffsetImage(astro_icon, zoom = zoom_level, interpolation = 'bicubic')
-            astro_marker = AnnotationBbox(astro_icon_image, conversion, frameon = False, annotation_clip = True)
-            astro_marker.set_clip_on(True)
+            for idx, body in enumerate(astro_data):
+                conversion = self.alt_az_to_viewport(body['alt_az'], lon_lat, extent, max_radius)
 
-            # add markers to list to render later - focal element last
-            if is_focus:
-                astro_markers.append(astro_marker)
-            else:
-                astro_markers.insert(0, astro_marker)
+                if self.kiosk_index == 0:
+                    is_focus = False
+                    zoom_level = 0.2
+                    focused_str = "   "
+                    line_color = "#666666"
+                    line_width = 2
+                elif self.kiosk_index == (idx + 1):
+                    is_focus = True
+                    zoom_level = 0.35
+                    focused_str = "<<<"
+                    line_color = "#2a2a2a"
+                    line_width = 3
+                else:
+                    is_focus = False
+                    zoom_level = 0.1
+                    focused_str = "   "
+                    line_color = "#999999"
+                    line_width = 1
+                
+                # read position history
+                position_history = localcache_read("./data/astro_position_log.json", body['id'])
+                position_history = [self.alt_az_to_viewport(alt_az, lon_lat, extent, max_radius) for alt_az in position_history.values()]
 
-            if len(legend_text) > 0: legend_text = legend_text + "\n"
-            legend_text = legend_text + body['name'] + ": " + str(round(float(body['position']['horizontal']['altitude']['degrees']), 1)) + ", " + str(round(float(body['position']['horizontal']['azimuth']['degrees']), 1)) + focused_str
+                ax.plot(*zip(*position_history),
+                    color = line_color,
+                    linewidth = line_width,
+                    zorder = 1)
 
-        # render marker list
-        for astro_marker in astro_markers:
-            ax.add_artist(astro_marker)
+                match body['id']:
+                    case 'moon':
+                        try:
+                            # moon phase icon fetch
+                            astro_icon = plt.imread("./theme/ui/icons/astro/moon_" + body['extraInfo']['phase']['string'].replace(" ", "_").lower() + ".png")
+                        except:
+                            # api returned unknown phase, show the confused moon!
+                            astro_icon = plt.imread("./theme/ui/icons/astro/moon_bug.png")
+                    case _:
+                        astro_icon = plt.imread("./theme/ui/icons/astro/" + body['id'] + ".png")
 
-        props = dict(alpha = 1, edgecolor = "#000000", facecolor = "#ffffff")
-        ax.text(0.025, 
-                0.975, 
-                legend_text, 
-                transform = ax.transAxes, 
-                fontsize = 24, 
-                verticalalignment = 'top',
-                bbox = props)
+                astro_icon_image = OffsetImage(astro_icon, zoom = zoom_level, interpolation = 'bicubic')
+                astro_marker = AnnotationBbox(astro_icon_image, conversion, frameon = False, annotation_clip = True)
+                astro_marker.set_clip_on(True)
+
+                # add markers to list to render later - focal element last
+                if is_focus:
+                    astro_markers.append(astro_marker)
+                else:
+                    astro_markers.insert(0, astro_marker)
+
+                if len(legend_text) > 0: legend_text = legend_text + "\n"
+                legend_text = legend_text + body['name'] + ": " + str(round(float(body['position']['horizontal']['altitude']['degrees']), 1)) + ", " + str(round(float(body['position']['horizontal']['azimuth']['degrees']), 1)) + focused_str
+
+            # render marker list
+            for astro_marker in astro_markers:
+                ax.add_artist(astro_marker)
+
+            # add legend
+            legend_bbox = dict(alpha = 1, edgecolor = "#000000", facecolor = "#ffffff")
+            ax.text(0.025, 
+                    0.975, 
+                    legend_text, 
+                    transform = ax.transAxes, 
+                    fontsize = 24, 
+                    verticalalignment = 'top',
+                    bbox = legend_bbox)
+        else:
+            # no astro data to plot, show placeholder
+            legend_text = "Nothing's in the sky right now... \nCheck back later!"
+            legend_bbox = dict(alpha = 1, edgecolor = "#000000", facecolor = "#ffffff")
+            ax.text(0.5, 
+                    0.5, 
+                    legend_text, 
+                    transform = ax.transAxes, 
+                    fontsize = 24, 
+                    verticalalignment = 'center',
+                    horizontalalignment = 'center',
+                    bbox = legend_bbox)
+
 
     def alt_az_to_viewport(self, alt_az: tuple, lon_lat: tuple, extent: list, max_radius: float):
                 #convert to lon lat at origin where circle bounds viewport square
