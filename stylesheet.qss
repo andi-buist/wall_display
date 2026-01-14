@@ -167,14 +167,12 @@ QLineEdit
 }
 
 
-/*-----QPlainTExtEdit-----*/
-QPlainTextEdit
+/*-----QTextEdit-----*/
+QTextEdit
 {
 	background-color: #fff;
 	color : #000;
-	border: 1px solid #000;
-	padding: 3px;
-	padding-left: 5px;
+	padding: 5px;
 
 }
 

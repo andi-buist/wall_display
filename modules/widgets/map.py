@@ -15,6 +15,9 @@ from cartopy import crs as ccrs
 from cartopy.io import img_tiles as ctiles
 import math
 from typing import Literal
+from scipy import ndimage
+import numpy as np
+import cv2
 
 from config import *
 from .widget_core import *
@@ -166,7 +169,7 @@ class HASSMap(HASSWidget):
         
         match self.overlay:
             case "cloud"|"temperature"|"precipitation":
-                map_dimension = 0.5 # if looking at weather, zoom out (arbitrary amount)
+                map_dimension = 2.25 # if looking at weather, zoom out (arbitrary amount)
             case _:
                 map_dimension = max(max(_lonlat_diff), _minimum_aspect) # don't zoom in past target
         
@@ -443,8 +446,9 @@ class HASSMap(HASSWidget):
                     line_width = 1
                 
                 # read position history
-                position_history = localcache_read("./data/astro_position_log.json", body['id'])
-                position_history = [self.alt_az_to_viewport(alt_az, lon_lat, extent, max_radius) for alt_az in position_history.values()]
+                position_history = localcache_read("./data/astro_position_log.json", body['id']).values()
+                position_history = sorted(position_history, key=lambda x: x[1]) # sort by azimuth (prevents line joining across discontinuity)
+                position_history = [self.alt_az_to_viewport(alt_az, lon_lat, extent, max_radius) for alt_az in position_history]
 
                 ax.plot(*zip(*position_history),
                     color = line_color,
@@ -514,23 +518,92 @@ class HASSMap(HASSWidget):
                 return conversion
     
     def plt_add_met_office_overlay(self, ax: plt.Axes, extent: tuple[float, float, float, float], type: str = Literal["cloud", "precipitation", "temperature"]) -> None:
-        overlay = get_met_office_map_overlay(config.met_office_weatherhub_config['file_id'][type])
-        overlay_extent = config.met_office_weatherhub_config['extent']
+        result = get_met_office_grib(file_id=config.met_office_atmospheric_models_config['file_id'][type])
+        overlay = result['image'].convert('RGB')
+        print(result['value_range'])
 
+        # calculations to crop overlay to map extent
+        overlay_extent = config.met_office_atmospheric_models_config['extent']
         # scales
         h_scale = overlay.width / (overlay_extent[1] - overlay_extent[0])
         v_scale = overlay.height / (overlay_extent[3] - overlay_extent[2])
-
+        # extent in pixels
         new_extent = (
             int((extent[0] - overlay_extent[0]) * h_scale),
             int((overlay_extent[3] - extent[3]) * v_scale),
             int((extent[1] - overlay_extent[0]) * h_scale),
             int((overlay_extent[3] - extent[2]) * v_scale)
         )
-
-        print(new_extent)
-
+        # crop
         overlay = overlay.crop(new_extent)
-        overlay = overlay.resize((self.mapsize, self.mapsize), resample= Image.Resampling.BICUBIC)
+        overlay = overlay.resize((self.mapsize, self.mapsize), resample= Image.Resampling.BOX)
 
+        #overlay = overlay.convert('L')
+
+        # calculate contour label positions, values, etc.
+        arr = np.array(overlay)
+        lab = cv2.cvtColor(arr, cv2.COLOR_RGB2LAB)
+        match self.overlay:
+            case "temperature":
+                target = cv2.split(lab)[2] # TODO: temperature is gb (i think? check when warmer if r used)
+            case _:
+                target = cv2.split(lab)[0]
+
+        quantization_bin = 8
+        arr = (target // quantization_bin) * quantization_bin
+
+        # add overlay to ax
+        overlay = Image.fromarray(255 - arr)
+        overlay.putalpha(196)
         ax.imshow(overlay, extent=extent)
+
+        overlay_text = []
+
+        unique_values = np.unique(arr)
+
+        if len(unique_values) != 1: # 0 (shouldn't happen) or >1, add labels foreach
+            for value in unique_values:
+                mask = arr == value
+                if mask.any():
+                    labelled = ndimage.label(mask)
+                    for idx in range(labelled[1]):
+                        mask_image = labelled[0] == idx
+                        if mask_image.sum() > 128 and mask_image.sum() < ((self.mapsize ** 2) - 128): # number of valid pixels
+                            y,x = ndimage.center_of_mass(mask_image) # row, col
+                            x = float(x)/self.mapsize
+                            y = (self.mapsize - float(y))/self.mapsize # coords are from top left
+                            overlay_text.append({"coords": (x,y), "value": value})
+        else: # 1 value, add central label
+            overlay_text.append({"coords": (0.5,0.5), "value": unique_values[0]})
+
+        #legends, labels
+        legend_bbox = dict(alpha = 1, edgecolor = "#000000", facecolor = "#ffffff")
+
+        #add contour labels
+        match self.overlay:
+            case "cloud"|"precipitation":
+                [x.update(value = str(int((x['value']/255) * 100)) + "%") for x in overlay_text]
+            case "temperature":
+                [x.update(value = str(int(result['value_range'][0] + ((x['value']/255) *  (result['value_range'][1] - result['value_range'][0])) - 273.15)) + "c") for x in overlay_text] # kelvin to c
+
+
+        for label in overlay_text:
+             ax.text(label['coords'][0],
+                     label['coords'][1],
+                     label['value'],
+                     transform = ax.transAxes,
+                     fontsize = 24,
+                     verticalalignment = 'center',
+                     horizontalalignment = 'center',
+                     bbox = legend_bbox,
+                     clip_on= True)
+        
+        # Add timestamp
+        ax.text(0.5, 
+                0.975, 
+                f"Updated: {result['timestamp'].strftime('%A %d %H:%M')}", 
+                transform = ax.transAxes, 
+                fontsize = 24, 
+                verticalalignment = 'top',
+                horizontalalignment = 'center',
+                bbox = legend_bbox)
