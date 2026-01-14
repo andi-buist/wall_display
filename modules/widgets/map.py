@@ -4,7 +4,7 @@ from PySide6.QtCore import Qt
 
 from io import BytesIO
 import dateutil
-from PIL import Image, ImageEnhance
+from PIL import Image, ImageEnhance, ImageOps
 import matplotlib
 import matplotlib.pyplot as plt
 import matplotlib.patches as patches
@@ -14,11 +14,12 @@ import cartopy
 from cartopy import crs as ccrs
 from cartopy.io import img_tiles as ctiles
 import math
+from typing import Literal
 
 from config import *
 from .widget_core import *
 from ..caching import *
-from ..api.astronomy import *
+from ..api.get_data import *
 
 matplotlib.use('agg')
 cartopy.config['cache_dir'] = "./.cache/cartopy/"
@@ -103,7 +104,7 @@ class HASSMap(HASSWidget):
 
     # Command invoked to toggle map overlay
     def toggle_overlay(self):
-        overlay_options = ["none", "astro"]
+        overlay_options = ["none", "astro", "cloud", "temperature", "precipitation"]
         idx = overlay_options.index(self.overlay)
         self.overlay = overlay_options[(idx + 1) % len(overlay_options)]
         self.overlay_button.setText(f"Overlay: {self.overlay.title()}")
@@ -120,18 +121,21 @@ class HASSMap(HASSWidget):
     def update_map(self):
         parent = self.parentWidget()
         if parent:
-            self.mapsize = int(min((parent.width(), parent.height())) * 0.9)
+            self.mapsize = int(min((parent.width(), parent.height())) * 0.875)
         else:
-            self.mapsize = 1
+            self.mapsize = 128
 
         pil_img = self.generate_map()
 
         if not pil_img:
             # generic image as a placeholder (when no data)
-            image = Image.open(common_image_paths["globe"])
+            image = Image.open(theme.common_image_paths["globe"])
             image = image.resize((self.mapsize, self.mapsize), resample= Image.Resampling.NEAREST)
             image = image.convert('1')
             pil_img = image
+
+        pil_img = pil_img.crop((1, 1, pil_img.width - 1, pil_img.height - 1))
+        pil_img = ImageOps.expand(pil_img, 1, fill = "#000000")
 
         data = BytesIO()
         pil_img.save(data, format="PNG")
@@ -155,13 +159,17 @@ class HASSMap(HASSWidget):
         _minimum_aspect = 0.0015
         _map_buffer_amount = 0.1
 
-        match self.map_focus:
+        _lonlat_diff = (max([x['attributes']['longitude'] for x in people]) - min([x['attributes']['longitude'] for x in people]),
+                        max([x['attributes']['latitude'] for x in people]) - min([x['attributes']['latitude'] for x in people]))
+        lonlat_centroid = (min([x['attributes']['longitude'] for x in people]) + (_lonlat_diff[0]/2),
+                            min([x['attributes']['latitude'] for x in people]) + (_lonlat_diff[1]/2))
+        
+        match self.overlay:
+            case "cloud"|"temperature"|"precipitation":
+                map_dimension = 0.5 # if looking at weather, zoom out (arbitrary amount)
             case _:
-                _lonlat_diff = (max([x['attributes']['longitude'] for x in people]) - min([x['attributes']['longitude'] for x in people]),
-                                max([x['attributes']['latitude'] for x in people]) - min([x['attributes']['latitude'] for x in people]))
                 map_dimension = max(max(_lonlat_diff), _minimum_aspect) # don't zoom in past target
-                lonlat_centroid = (min([x['attributes']['longitude'] for x in people]) + (_lonlat_diff[0]/2),
-                                    min([x['attributes']['latitude'] for x in people]) + (_lonlat_diff[1]/2))
+        
         map_buffer = map_dimension * _map_buffer_amount
 
         extent = [
@@ -170,7 +178,7 @@ class HASSMap(HASSWidget):
             lonlat_centroid[1] - (map_dimension/2) - map_buffer,
             lonlat_centroid[1] + (map_dimension/2) + map_buffer,
             ]
-        
+
         #filter to ensure not rendering tile content out of bounds
         zones = self.filter_entities_to_extent(zones, extent)
         people = self.filter_entities_to_extent(people, extent)
@@ -197,7 +205,9 @@ class HASSMap(HASSWidget):
                 label_store = self.plt_add_zones(ax, zones, -map_buffer, label_store)
                 label_store = self.plt_add_people(ax, people, map_buffer, label_store)
             case "astro":
-                self.plt_add_astronomy(self.astro_data, fig, ax, lonlat_centroid, extent, (map_dimension/2) + (map_buffer/2)) # +map buffer would have circle perfectly fit square, but we want some allowance for icons
+                self.plt_add_astronomy(self.astro_data, ax, lonlat_centroid, extent, (map_dimension/2) + (map_buffer/2)) # +map buffer would have circle perfectly fit square, but we want some allowance for icons
+            case "cloud"|"temperature"|"precipitation":
+                self.plt_add_met_office_overlay(ax, extent, type = self.overlay)
     
         adjust_text(label_store, arrowprops=dict(arrowstyle = '-', color = "#000000", linewidth = 3, zorder = 2))
         """---End of second plot cycle---"""
@@ -212,6 +222,13 @@ class HASSMap(HASSWidget):
 
         return image
     
+    def filter_entities_to_extent(self, entity_list: list[dict], extent: list):
+        return [x for x in entity_list if 
+            x['attributes']['longitude'] >= extent[0] and 
+            x['attributes']['longitude'] <= extent[1] and
+            x['attributes']['latitude'] >= extent[2] and 
+            x['attributes']['latitude'] <= extent[3]]
+
     def get_map_image(self, size: int, extent: list, aspect: float, min_aspect: float, brightness: float, contrast: float) -> Image:
         match math.floor(math.log2(aspect / min_aspect)):
             case 0: _zoom_level = 17
@@ -345,7 +362,7 @@ class HASSMap(HASSWidget):
         allowed_bodies = ['sun', 'moon', 'mercury', 'venus', 'mars', 'jupiter', 'saturn', 'uranus', 'neptune']
                     
         # data fetch from api
-        astro_data = get_astro_data(lon_lat, astronomy_config["id"], astronomy_config["secret"])
+        astro_data = get_astro_data(lon_lat)
         astro_data = [body for body in astro_data if body['id'] in allowed_bodies]
 
         # convert altitude & azimuth to radians (added rounding because it was overly-specific)
@@ -380,7 +397,7 @@ class HASSMap(HASSWidget):
                 pass
         return astro_data
 
-    def plt_add_astronomy(self, astro_data: list[dict], fig: plt.Figure, ax: plt.Axes, lon_lat: tuple, extent: list, max_radius: float) -> None:
+    def plt_add_astronomy(self, astro_data: list[dict], ax: plt.Axes, lon_lat: tuple, extent: list, max_radius: float) -> None:
 
         if len(astro_data) > 0:
             # reset kiosk index if past final set
@@ -484,7 +501,6 @@ class HASSMap(HASSWidget):
                     horizontalalignment = 'center',
                     bbox = legend_bbox)
 
-
     def alt_az_to_viewport(self, alt_az: tuple, lon_lat: tuple, extent: list, max_radius: float):
                 #convert to lon lat at origin where circle bounds viewport square
                 conversion = [math.sin(alt_az[1]), math.cos(alt_az[1])] 
@@ -497,9 +513,24 @@ class HASSMap(HASSWidget):
 
                 return conversion
     
-    def filter_entities_to_extent(self, entity_list: list[dict], extent: list):
-        return [x for x in entity_list if 
-         x['attributes']['longitude'] >= extent[0] and 
-         x['attributes']['longitude'] <= extent[1] and
-         x['attributes']['latitude'] >= extent[2] and 
-         x['attributes']['latitude'] <= extent[3]]
+    def plt_add_met_office_overlay(self, ax: plt.Axes, extent: tuple[float, float, float, float], type: str = Literal["cloud", "precipitation", "temperature"]) -> None:
+        overlay = get_met_office_map_overlay(config.met_office_weatherhub_config['file_id'][type])
+        overlay_extent = config.met_office_weatherhub_config['extent']
+
+        # scales
+        h_scale = overlay.width / (overlay_extent[1] - overlay_extent[0])
+        v_scale = overlay.height / (overlay_extent[3] - overlay_extent[2])
+
+        new_extent = (
+            int((extent[0] - overlay_extent[0]) * h_scale),
+            int((overlay_extent[3] - extent[3]) * v_scale),
+            int((extent[1] - overlay_extent[0]) * h_scale),
+            int((overlay_extent[3] - extent[2]) * v_scale)
+        )
+
+        print(new_extent)
+
+        overlay = overlay.crop(new_extent)
+        overlay = overlay.resize((self.mapsize, self.mapsize), resample= Image.Resampling.BICUBIC)
+
+        ax.imshow(overlay, extent=extent)

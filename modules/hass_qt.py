@@ -10,6 +10,9 @@ import theme
 class HASSApp(QtWidgets.QApplication):
     def __init__(self, resolution: tuple[int] = (800,480)):
         QtWidgets.QApplication.__init__(self)
+        style_file = QtCore.QFile(theme.global_qss)
+        style_file.open(QtCore.QFile.OpenModeFlag.ReadOnly)
+        self.setStyleSheet(style_file.readAll().toStdString())
 
         self.setFont(theme.global_font)
 
@@ -77,11 +80,11 @@ class HASSApp(QtWidgets.QApplication):
     # These are mostly here for debug. Can be removed/deactivated and run silently in widgets
     def on_entities_updated(self, entities):
         # Update all widgets with new entities dict
-        print("∎∎∎" + str(datetime.datetime.now().replace(microsecond=0)) + "∎∎∎ : " + str(len(entities)) + " entities refreshed")
+        print(str(len(entities)) + " entities refreshed")
 
     def on_entity_state_changed(self, entity):
         # Update only the widget(s) for this entity
-        print("∎∎∎" + str(datetime.datetime.now().replace(microsecond=0)) + "∎∎∎ : " + entity['entity_id'] + " refreshed")
+        print(entity['entity_id'] + " refreshed")
     
     # TODO: if options are all in a bit dict/list... we could just marry them to IDs!
     def slot(self, button):

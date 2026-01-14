@@ -3,7 +3,7 @@ from PySide6.QtGui import QImage, QPixmap
 from pubsub import pub
 from PIL import Image
 from ..websocket_defs import HASSDataManager
-from theme import common_image_paths
+import theme
 
 class HASSWidget(QtWidgets.QWidget):
     def __init__(self,
@@ -76,7 +76,7 @@ class HASSWidget(QtWidgets.QWidget):
 
         # Error image (use a built-in Qt icon or your own)
         error_image = QtWidgets.QLabel()
-        pixmap = QPixmap(common_image_paths["bug"]).scaled(512,512, QtCore.Qt.KeepAspectRatio, QtCore.Qt.SmoothTransformation)
+        pixmap = QPixmap(theme.common_image_paths["bug"]).scaled(512,512, QtCore.Qt.KeepAspectRatio, QtCore.Qt.SmoothTransformation)
         error_image.setPixmap(pixmap)
         error_image.setAlignment(QtCore.Qt.AlignCenter)
         layout.addWidget(error_image)
