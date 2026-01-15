@@ -522,22 +522,35 @@ class HASSMap(HASSWidget):
     
     def plt_add_met_office_overlay(self, ax: plt.Axes, extent: tuple[float, float, float, float], type: str = Literal["cloud", "precipitation", "temperature"]) -> None:
         result = get_met_office_grib(file_id=config.met_office_atmospheric_models_config['file_id'][type])
-        overlay = result['image'].convert('L')
+        overlay: Image.Image = result['image'].convert('L')
 
         # calculations to crop overlay to map extent
         overlay_extent = config.met_office_atmospheric_models_config['extent']
-        # scales
+        # scales - pixels per degree
         h_scale = overlay.width / (overlay_extent[1] - overlay_extent[0])
         v_scale = overlay.height / (overlay_extent[3] - overlay_extent[2])
+
+        #degree differences
+        left_border = extent[0] - overlay_extent[0]
+        right_border = extent[1] - overlay_extent[0]
+        bottom_border = extent[2] - overlay_extent[2]
+        top_border = extent[3] - overlay_extent[2]
+
         # extent in pixels
         new_extent = (
-            int((extent[0] - overlay_extent[0]) * h_scale),
-            int((overlay_extent[3] - extent[3]) * v_scale),
-            int((extent[1] - overlay_extent[0]) * h_scale),
-            int((overlay_extent[3] - extent[2]) * v_scale)
+            int(left_border * h_scale),
+            overlay.height - int(top_border * v_scale),
+            int(right_border * h_scale),
+            overlay.height - int(bottom_border * v_scale)
         )
+
+        print(new_extent)
+
         # crop
+        overlay.show()
         overlay = overlay.crop(new_extent)
+        overlay.show()
+        overlay = overlay.resize((int(overlay.size[0]/2), int(overlay.size[1]/2)), resample= Image.Resampling.BICUBIC)
         overlay = overlay.resize((self.mapsize, self.mapsize), resample= Image.Resampling.BICUBIC)
         
         # calculate contour label positions, values, etc.
@@ -559,9 +572,9 @@ class HASSMap(HASSWidget):
             for value in unique_values:
                 mask = arr == value # TODO: add masks to a list and use kiosk to highlight each in turn? Add to ax in separate passes...
                 if mask.any():
-                    labelled = ndimage.label(mask)
-                    for idx in range(labelled[1]):
-                        mask_image = labelled[0] == idx
+                    label_arr, n_labels = ndimage.label(mask)
+                    for idx in range(1, n_labels + 1):
+                        mask_image = label_arr == idx
                         if mask_image.sum() > 32 and mask_image.sum() < ((self.mapsize ** 2) - 32): # number of valid pixels
                             y,x = ndimage.center_of_mass(mask_image) # row, col
                             x = float(x)/self.mapsize
