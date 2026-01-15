@@ -2,7 +2,7 @@ from .widget_core import HASSWidget
 from PySide6.QtWidgets import QPushButton
 
 class HASSEntityButton(HASSWidget):
-    def __init__(self, data_manager, entity_id: str=None, command: callable=None, parent=None):
+    def __init__(self, data_manager, entity_id: str=None, command: callable=None, parent=None): #
         super().__init__(data_manager, entity_ids=entity_id, parent=parent)
 
         self.button = QPushButton(self)

@@ -133,7 +133,7 @@ class HASSMap(HASSWidget):
 
         if not pil_img:
             # generic image as a placeholder (when no data)
-            image = Image.open(theme.common_image_paths["globe"])
+            image = Image.open(theme.filestore['ui']['img']['globe'])
             image = image.resize((self.mapsize, self.mapsize), resample= Image.Resampling.NEAREST)
             image = image.convert('1')
             pil_img = image
@@ -460,12 +460,12 @@ class HASSMap(HASSWidget):
                     case 'moon':
                         try:
                             # moon phase icon fetch
-                            astro_icon = plt.imread("./theme/ui/icons/astro/moon_" + body['extraInfo']['phase']['string'].replace(" ", "_").lower() + ".png")
+                            astro_icon = plt.imread(theme.filestore['ui']['icons']['astro']["moon_" + body['extraInfo']['phase']['string'].replace(" ", "_").lower()])
                         except:
                             # api returned unknown phase, show the confused moon!
-                            astro_icon = plt.imread("./theme/ui/icons/astro/moon_bug.png")
+                            astro_icon = plt.imread(theme.filestore['ui']['icons']['astro']["moon_bug"])
                     case _:
-                        astro_icon = plt.imread("./theme/ui/icons/astro/" + body['id'] + ".png")
+                        astro_icon = plt.imread(theme.filestore['ui']['icons']['astro'][body['id']])
 
                 astro_icon_image = OffsetImage(astro_icon, zoom = zoom_level, interpolation = 'bicubic')
                 astro_marker = AnnotationBbox(astro_icon_image, conversion, frameon = False, annotation_clip = True)

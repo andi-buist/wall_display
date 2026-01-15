@@ -42,7 +42,7 @@ class HASSApp(QtWidgets.QApplication):
                                           "light.floor_lamp", 
                                           HASSEntityButton.light_switch)},
             {'label': "Spinner",
-             'widget': ChannelSpinner(self.data_manager)},
+             'widget': ChannelSpinner(self.data_manager, font_scale=3)},
             {'label': "Map",
              'widget': HASSMap(self.data_manager)},
             {'label': "Terminal",

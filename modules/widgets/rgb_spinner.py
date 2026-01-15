@@ -1,9 +1,10 @@
-from PySide6 import QtCore, QtWidgets
+from PySide6 import QtCore, QtWidgets, QtGui
 import requests
 from io import BytesIO
 import webcolors
 
 from .widget_core import *
+from theme import *
 from ..caching import *
 
 global xkcd_colours
@@ -112,21 +113,25 @@ class HASSEntityRGBSpinner(HASSWidget):
         return min(distances, key=distances.get)
 """
 class ChannelSpinner(HASSWidget):
-    def __init__(self, data_manager, entity_id=None, bits: int = 8, parent=None):
+    def __init__(self, data_manager, entity_id=None, bits: int = 8, font_scale: float = None, parent=None):
         super().__init__(data_manager, entity_ids=entity_id, parent=parent)
         self.value = 0
         self.bits = bits
+        self.label_min_size = 32
+        self.font_scale = font_scale
 
         layout = QtWidgets.QVBoxLayout(self)
 
-        self.up_button = QtWidgets.QPushButton("+")
+        self.up_button = QtWidgets.QPushButton()
+        self.up_button.setIcon(QtGui.QPixmap(theme.filestore['ui']['icons']['general']['arrow_up']))
         self.up_button.clicked.connect(lambda: self.increment_channel(1))
-        self.down_button = QtWidgets.QPushButton("-")
+        self.down_button = QtWidgets.QPushButton()
+        self.down_button.setIcon(QtGui.QPixmap(theme.filestore['ui']['icons']['general']['arrow_down']))
         self.down_button.clicked.connect(lambda: self.increment_channel(-1))
 
         self.value_label = QtWidgets.QLabel(alignment=QtCore.Qt.AlignmentFlag.AlignCenter)
-        self.value_label.setMinimumSize(32,32)
-        self.value_label.setStyleSheet("background: #fff; border: 1px solid #000; font-size: 96pt")
+        self.value_label.setMinimumSize(self.label_min_size,self.label_min_size)
+        self.value_label.setStyleSheet(f"background: #fff; border: 1px solid #000; font-size: {self.get_font_size()}pt")
 
         layout.addWidget(self.up_button)
         layout.addWidget(self.value_label)
@@ -136,9 +141,21 @@ class ChannelSpinner(HASSWidget):
         
     def increment_channel(self, value: int):
         self.value = min(max((self.value + value), 0), self.bits-1)
-        self.value_label.setText(str(self.value))
-
         _fraction = self.value/(self.bits-1)
         _channel_strength = 255 - round(255 * _fraction)
         _hex_code = '#%02x%02x%02x' % (_channel_strength, _channel_strength, _channel_strength)
-        self.value_label.setStyleSheet(f"background: {_hex_code}; border: 1px solid #000; font-size: 96pt")
+
+        if _fraction > 0.5:
+            self.value_label.setStyleSheet(f"background: {_hex_code}; border: 1px solid #000; font-size: {self.get_font_size()}pt; color: #fff")
+        else:
+            self.value_label.setStyleSheet(f"background: {_hex_code}; border: 1px solid #000; font-size: {self.get_font_size()}pt; color: #000")
+        
+        if self.font_scale:
+            self.value_label.setText(str(self.value))
+
+    
+    def get_font_size(self):
+        if self.font_scale:
+            return max(int((min(self.value_label.size().width(), self.value_label.size().height())/self.label_min_size) * self.font_scale),1)
+        else:
+            return 1
