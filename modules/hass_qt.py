@@ -1,9 +1,10 @@
-from PySide6 import QtCore, QtWidgets, QtGui
+from PySide6 import QtCore, QtWidgets
 from websocket import *
 
 from modules.websocket_defs import *
 from modules.widgets.buttons import *
 from modules.widgets.map import *
+from modules.widgets.rgb_spinner import *
 from modules.widgets.terminal import *
 import theme
 
@@ -33,19 +34,15 @@ class HASSApp(QtWidgets.QApplication):
         layout = QtWidgets.QHBoxLayout(central_widget)
 
         # Widgets!
-        light_switch = SingleEntityButton(self.data_manager, 
-                                          "light.floor_lamp", 
-                                          SingleEntityButton.light_switch)
-        map = HASSMap(self.data_manager)
-        terminal = Terminal()
-
         self.widget_store = [
             {'label': "Calendar",
              'widget': QtWidgets.QCalendarWidget()},
             {'label': "Light Switch",
-             'widget': SingleEntityButton(self.data_manager, 
+             'widget': HASSEntityButton(self.data_manager, 
                                           "light.floor_lamp", 
-                                          SingleEntityButton.light_switch)},
+                                          HASSEntityButton.light_switch)},
+            {'label': "Spinner",
+             'widget': ChannelSpinner(self.data_manager)},
             {'label': "Map",
              'widget': HASSMap(self.data_manager)},
             {'label': "Terminal",
@@ -53,7 +50,7 @@ class HASSApp(QtWidgets.QApplication):
                          ]
 
         # Button layout
-        button_layout_parent = QWidget()
+        button_layout_parent = QtWidgets.QWidget()
         button_layout_parent.setFixedWidth(int(resolution[0] * (2/8)))
         layout.addWidget(button_layout_parent)
         button_layout = QtWidgets.QVBoxLayout(button_layout_parent)

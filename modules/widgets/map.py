@@ -1,6 +1,5 @@
-from PySide6.QtWidgets import QWidget, QLabel, QPushButton, QVBoxLayout, QHBoxLayout
+from PySide6 import QtWidgets
 from PySide6.QtGui import QPixmap, QImage
-from PySide6.QtCore import Qt
 
 from io import BytesIO
 import dateutil
@@ -50,23 +49,23 @@ class HASSMap(HASSWidget):
 
         """Qt Setup"""
 
-        layout = QVBoxLayout(self)
-        map_layout = QVBoxLayout()
-        button_layout = QHBoxLayout()
+        layout = QtWidgets.QVBoxLayout(self)
+        map_layout = QtWidgets.QVBoxLayout()
+        button_layout = QtWidgets.QHBoxLayout()
         layout.addLayout(map_layout)
         layout.addLayout(button_layout)
 
         # Map image label
-        self.map_label = QLabel(self)
+        self.map_label = QtWidgets.QLabel(self)
         self.map_label.setAlignment(QtCore.Qt.AlignCenter)
         map_layout.addWidget(self.map_label)
 
         # Focus and overlay buttons
-        self.focus_button = QPushButton("Focus: All", self)
+        self.focus_button = QtWidgets.QPushButton("Focus: All")
         self.focus_button.clicked.connect(self.toggle_focus)
         button_layout.addWidget(self.focus_button)
 
-        self.overlay_button = QPushButton("Overlay: None", self)
+        self.overlay_button = QtWidgets.QPushButton("Overlay: None")
         self.overlay_button.clicked.connect(self.toggle_overlay)
         button_layout.addWidget(self.overlay_button)
 
@@ -547,9 +546,7 @@ class HASSMap(HASSWidget):
         print(new_extent)
 
         # crop
-        overlay.show()
         overlay = overlay.crop(new_extent)
-        overlay.show()
         overlay = overlay.resize((int(overlay.size[0]/2), int(overlay.size[1]/2)), resample= Image.Resampling.BICUBIC)
         overlay = overlay.resize((self.mapsize, self.mapsize), resample= Image.Resampling.BICUBIC)
         

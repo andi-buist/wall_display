@@ -1,30 +1,22 @@
-import tkinter as tk
-from tkinter import ttk
+from PySide6 import QtCore, QtWidgets
 import requests
 from io import BytesIO
 import webcolors
-import json
 
 from .widget_core import *
 from ..caching import *
-from modules.websocket_defs import ThreadedWebsocket
 
 global xkcd_colours
 
 with BytesIO(requests.get("https://xkcd.com/color/rgb.txt").content) as file:
 #remove 1st entry as this is the title, license, etc.
     xkcd_colours = dict([tuple(line.decode('utf-8').split("\t")[0:2]) for line in file][1:])
-
-class EntityRGBSpinners(HASSWidget):
-    def __init__(self, master, local_ws: ThreadedWebsocket,
-                 entity_type: str | list[str] = None, entity_id: str | list[str] = None, 
-                 state_channel: str | list[str] = [],
-                 **kwargs):
-        HASSWidget.__init__(self=self, master=master, widget_name="entity_rgb_spinner",
-                              entity_type=entity_type, entity_id=entity_id, 
-                              state_channel=state_channel,
-                              **kwargs)
-        self.local_ws = local_ws
+    
+"""
+class HASSEntityRGBSpinner(HASSWidget):
+    def __init__(self, data_manager, entity_id, parent=None):
+        super().__init__(data_manager, entity_ids=entity_id, parent=parent)
+        layout = QtWidgets.QVBoxLayout(self)
 
     def construct_widget(self, entity_id: str, entity: dict):
         if entity['state'] == "on":
@@ -118,3 +110,35 @@ class EntityRGBSpinners(HASSWidget):
             bd = (b_c - requested_colour[2]) ** 2
             distances[name] = rd + gd + bd
         return min(distances, key=distances.get)
+"""
+class ChannelSpinner(HASSWidget):
+    def __init__(self, data_manager, bits: int = 8, entity_id = [], parent=None):
+        super().__init__(data_manager, entity_ids=entity_id, parent=parent)
+        self.value = 0
+        self.bits = bits
+
+        layout = QtWidgets.QVBoxLayout(self)
+
+        self.up_button = QtWidgets.QPushButton("+")
+        self.up_button.clicked.connect(lambda: self.increment_channel(1))
+        self.down_button = QtWidgets.QPushButton("-")
+        self.down_button.clicked.connect(lambda: self.increment_channel(-1))
+
+        self.value_label = QtWidgets.QLabel(alignment=QtCore.Qt.AlignmentFlag.AlignCenter)
+        self.value_label.setMinimumSize(32,32)
+        self.value_label.setStyleSheet("background: #fff; border: 1px solid #000; font-size: 96pt")
+
+        layout.addWidget(self.up_button)
+        layout.addWidget(self.value_label)
+        layout.addWidget(self.down_button)
+
+        self.increment_channel(-1)
+        
+    def increment_channel(self, value: int):
+        self.value = min(max((self.value + value), 0), self.bits-1)
+        self.value_label.setText(str(self.value))
+
+        _fraction = self.value/(self.bits-1)
+        _channel_strength = 255 - round(255 * _fraction)
+        _hex_code = '#%02x%02x%02x' % (_channel_strength, _channel_strength, _channel_strength)
+        self.value_label.setStyleSheet(f"background: {_hex_code}; border: 1px solid #000; font-size: 96pt")
