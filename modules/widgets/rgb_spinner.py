@@ -112,7 +112,7 @@ class HASSEntityRGBSpinner(HASSWidget):
         return min(distances, key=distances.get)
 """
 class ChannelSpinner(HASSWidget):
-    def __init__(self, data_manager, bits: int = 8, entity_id = [], parent=None):
+    def __init__(self, data_manager, entity_id=None, bits: int = 8, parent=None):
         super().__init__(data_manager, entity_ids=entity_id, parent=parent)
         self.value = 0
         self.bits = bits

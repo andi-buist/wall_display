@@ -1,10 +1,10 @@
 from .widget_core import HASSWidget
 from PySide6.QtWidgets import QPushButton
-import json
 
 class HASSEntityButton(HASSWidget):
-    def __init__(self, data_manager, entity_id, command, parent=None):
+    def __init__(self, data_manager, entity_id: str=None, command: callable=None, parent=None):
         super().__init__(data_manager, entity_ids=entity_id, parent=parent)
+
         self.button = QPushButton(self)
         self.button.clicked.connect(lambda: command(self, entity_id))
         # Layout setup, etc.

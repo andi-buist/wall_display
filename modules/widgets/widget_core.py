@@ -15,32 +15,38 @@ class HASSWidget(QtWidgets.QWidget):
         super().__init__(parent)
         self.data_manager = data_manager
 
-        if entity_types:
-            if isinstance(entity_types, list):
-                self.entity_types = entity_types
-            else:
-                self.entity_types = [entity_types]
+        self.entity_types = []
+        self.entity_ids = []
 
-        if entity_ids:
-            if isinstance(entity_ids, list):
-                self.entity_ids = entity_ids 
-            else:
-                self.entity_ids = [entity_ids]
+        match entity_types:
+            case str():
+                self.entity_types.append(entity_types)
+            case list():
+                self.entity_types = self.entity_types + entity_types
+        match entity_ids:
+            case str():
+                self.entity_ids.append(entity_ids)
+            case list():
+                self.entity_ids = self.entity_ids + entity_ids
 
         self.data_manager.entities_updated.connect(self._on_entities_updated)
         self.data_manager.entity_state_changed.connect(self._on_entity_state_changed)
-        # Optionally, store current entity state(s)
+
         self.entities = {}
 
         self.error_label = None
 
     def _on_entities_updated(self, entities):
         # Filter for relevant entities
+        if len(self.entity_types) > 0:
+            self.entity_ids = list(set(self.entity_ids + self._get_matching_entity_ids_by_type(entities))) # if types specified, get valid ids and merge into entity_ids (unique)
 
-        if hasattr(self, "entity_types"):
-            self.entity_ids = self._get_matching_entity_ids_by_type(entities)
+        relevant = {}
 
-        relevant = {eid: entities[eid] for eid in self.entity_ids if eid in entities}
+        for eid in self.entity_ids:
+            if eid in entities:
+                relevant[eid] = entities[eid]
+
         self.entities.update(relevant)
         self.on_entities_update(relevant)
 
@@ -59,34 +65,30 @@ class HASSWidget(QtWidgets.QWidget):
 
     def _get_matching_entity_ids_by_type(self, entities: dict):
         relevant_entities = []
-        for type in self.entity_types:
-            relevant_entities = relevant_entities + [id for id in entities.keys() if type in id]
+        if self.entity_types:
+            for type in self.entity_types:
+                relevant_entities = relevant_entities + [id for id in entities.keys() if type in id]
 
         return relevant_entities
     
     def show_error(self, message):
-        # Remove previous error label if present
         if self.error_label:
             self.error_label.deleteLater()
             self.error_label = None
 
-        # Create error image and message label
         self.error_label = QtWidgets.QWidget(self)
         layout = QtWidgets.QVBoxLayout(self.error_label)
 
-        # Error image (use a built-in Qt icon or your own)
         error_image = QtWidgets.QLabel()
         pixmap = QPixmap(theme.common_image_paths["bug"]).scaled(512,512, QtCore.Qt.KeepAspectRatio, QtCore.Qt.SmoothTransformation)
         error_image.setPixmap(pixmap)
         error_image.setAlignment(QtCore.Qt.AlignCenter)
         layout.addWidget(error_image)
 
-        # Error message
         error_msg = QtWidgets.QLabel(message)
         error_msg.setAlignment(QtCore.Qt.AlignCenter)
         layout.addWidget(error_msg)
 
-        # Add to main layout
         self.error_label.setLayout(layout)
         self.error_label.show()
         self.error_label.setGeometry(0, 0, self.width(), self.height())

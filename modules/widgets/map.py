@@ -32,7 +32,6 @@ cartopy.config['cache_dir'] = "./.cache/cartopy/"
 class HASSMap(HASSWidget):
     def __init__(self, data_manager, parent=None):
         super().__init__(data_manager, entity_types=["person", "zone"], entity_ids=None, parent=parent)
-
         self.mapsize = None
 
         self.map_focus = "all"
@@ -542,8 +541,6 @@ class HASSMap(HASSWidget):
             int(right_border * h_scale),
             overlay.height - int(bottom_border * v_scale)
         )
-
-        print(new_extent)
 
         # crop
         overlay = overlay.crop(new_extent)
