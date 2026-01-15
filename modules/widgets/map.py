@@ -21,10 +21,12 @@ from scipy.spatial.distance import cdist
 from collections import defaultdict
 import networkx as nx
 
-from config import *
 from .widget_core import *
 from ..caching import *
 from ..api.get_data import *
+
+with open("tokens.json") as f: 
+    token_config = json.load(f)
 
 matplotlib.use('agg')
 cartopy.config['cache_dir'] = "./.cache/cartopy/"
@@ -75,7 +77,7 @@ class HASSMap(HASSWidget):
         # Update zones and people lists, then redraw map
         self.zones = [entity for id, entity in entities.items() if 'zone' in id]
         self.people = [entity for id, entity in entities.items() if 'person' in id]
-        self.astro_data =  self.get_astronomy_data(astronomy_lon_lat) # uses known location to fetch to prevent weird drift in cached logs
+        self.astro_data =  self.get_astronomy_data(token_config['astronomy_lon_lat']) # uses known location to fetch to prevent weird drift in cached logs
         self.update_map()
 
     def on_entity_update(self, entity):
@@ -519,11 +521,11 @@ class HASSMap(HASSWidget):
                 return conversion
     
     def plt_add_met_office_overlay(self, ax: plt.Axes, extent: tuple[float, float, float, float], type: str = Literal["cloud", "precipitation", "temperature"]) -> None:
-        result = get_met_office_grib(file_id=config.met_office_atmospheric_models_config['file_id'][type])
+        result = get_met_office_grib(file_id=token_config['met_office_atmospheric_models_config']['file_id'][type])
         overlay: Image.Image = result['image'].convert('L')
 
         # calculations to crop overlay to map extent
-        overlay_extent = config.met_office_atmospheric_models_config['extent']
+        overlay_extent = token_config['met_office_atmospheric_models_config']['extent']
         # scales - pixels per degree
         h_scale = overlay.width / (overlay_extent[1] - overlay_extent[0])
         v_scale = overlay.height / (overlay_extent[3] - overlay_extent[2])

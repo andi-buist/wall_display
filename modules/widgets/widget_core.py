@@ -1,7 +1,5 @@
 from PySide6 import QtCore, QtWidgets
 from PySide6.QtGui import QImage, QPixmap
-from pubsub import pub
-from PIL import Image
 from ..websocket_defs import HASSDataManager
 import theme
 

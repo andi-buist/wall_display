@@ -1,22 +1,26 @@
+import json
 import base64
 import datetime
 import pandas as pd
 import requests
 import requests_cache
 import time
-import config
 from urllib.parse import quote
 from PIL import Image
 from io import BytesIO
 import xarray as xr
 import os
 import numpy as np
+import stravalib
+
+with open("tokens.json") as f: 
+    token_config = json.load(f)
 
 astro_session = requests_cache.CachedSession('.cache/astro/cached_requests', expire_after=60)
 met_office_session = requests_cache.CachedSession('.cache/met_office/cached_requests', expire_after=3600)
 
 def get_astro_data(lon_lat: tuple, timestamp: str = None, retries: int = 5) -> list:
-    userpass = config.astronomy_config['id'] + ":" + config.astronomy_config['secret']
+    userpass = token_config['astronomy_config']['id'] + ":" + token_config['astronomy_config']['secret']
     authString = base64.b64encode(userpass.encode()).decode()
 
     if timestamp is None:
@@ -47,8 +51,8 @@ def get_astro_data(lon_lat: tuple, timestamp: str = None, retries: int = 5) -> l
 def get_met_office_grib(file_id: str = None, retries: int = 5) -> dict:
     safe_file_id = quote(file_id + str(datetime.datetime.now().hour), safe="")
 
-    api_key = config.met_office_atmospheric_models_config['secret']
-    api_url = f"https://data.hub.api.metoffice.gov.uk/atmospheric-models/1.0.0/orders/{config.met_office_atmospheric_models_config['order_id']}/latest/{safe_file_id}/data"
+    api_key = token_config['met_office_atmospheric_models_config']['secret']
+    api_url = f"https://data.hub.api.metoffice.gov.uk/atmospheric-models/1.0.0/orders/{token_config['met_office_atmospheric_models_config']['order_id']}/latest/{safe_file_id}/data"
 
     for attempt in range(retries):
         try:
@@ -84,19 +88,10 @@ def get_met_office_grib(file_id: str = None, retries: int = 5) -> dict:
 
     return {"image": image, "value_range": value_range, "timestamp": response.created_at}
 
-# deprecated in favour of grib with known range
-def get_met_office_map_overlay(file_id: str = None) -> dict:
-    safe_file_id = quote(file_id + str(datetime.datetime.now().hour) +"_+00", safe="")
-
-    api_key = config.met_office_map_images_config['secret']
-    api_url = f"https://data.hub.api.metoffice.gov.uk/map-images/1.0.0/orders/{config.met_office_map_images_config['order_id']}/latest/{safe_file_id}/data"
-
-    response = met_office_session.get(api_url,
-                 headers = {
-                     "apikey": api_key,
-                     "Accept": "image/png"
-                     })
+def get_strava_data():
     
-    image = Image.open(BytesIO(response.content)).convert('RGBA')
+    client = stravalib.Client()
 
-    return {"image": image, "timestamp": response.created_at}
+    activities = client.get_activities(after = (datetime.datetime.today() - datetime.timedelta(days = 7)))
+    data = list(activities)
+    return data

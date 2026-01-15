@@ -1,6 +1,8 @@
 from PySide6 import QtCore, QtWebSockets
 import json
-from config import hass_config
+
+with open("tokens.json") as f: 
+    hass_config = json.load(f)["hass_config"]
 
 HASS_WS_URL = hass_config['url']
 TOKEN = hass_config['secret']

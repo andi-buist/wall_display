@@ -4,4 +4,5 @@ __pycache__/
 data/
 *.pyc
 *.pyo
-config.py
+tokens.json
+test.ipynb
