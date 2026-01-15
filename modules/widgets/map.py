@@ -18,6 +18,9 @@ from typing import Literal
 from scipy import ndimage
 import numpy as np
 import cv2
+from scipy.spatial.distance import cdist
+from collections import defaultdict
+import networkx as nx
 
 from config import *
 from .widget_core import *
@@ -519,8 +522,7 @@ class HASSMap(HASSWidget):
     
     def plt_add_met_office_overlay(self, ax: plt.Axes, extent: tuple[float, float, float, float], type: str = Literal["cloud", "precipitation", "temperature"]) -> None:
         result = get_met_office_grib(file_id=config.met_office_atmospheric_models_config['file_id'][type])
-        overlay = result['image'].convert('RGB')
-        print(result['value_range'])
+        overlay = result['image'].convert('L')
 
         # calculations to crop overlay to map extent
         overlay_extent = config.met_office_atmospheric_models_config['extent']
@@ -536,21 +538,13 @@ class HASSMap(HASSWidget):
         )
         # crop
         overlay = overlay.crop(new_extent)
-        overlay = overlay.resize((self.mapsize, self.mapsize), resample= Image.Resampling.BOX)
-
-        #overlay = overlay.convert('L')
-
+        overlay = overlay.resize((self.mapsize, self.mapsize), resample= Image.Resampling.BICUBIC)
+        
         # calculate contour label positions, values, etc.
         arr = np.array(overlay)
-        lab = cv2.cvtColor(arr, cv2.COLOR_RGB2LAB)
-        match self.overlay:
-            case "temperature":
-                target = cv2.split(lab)[2] # TODO: temperature is gb (i think? check when warmer if r used)
-            case _:
-                target = cv2.split(lab)[0]
 
-        quantization_bin = 8
-        arr = (target // quantization_bin) * quantization_bin
+        quantization_bin = 32
+        arr = (arr // quantization_bin) * quantization_bin
 
         # add overlay to ax
         overlay = Image.fromarray(255 - arr)
@@ -563,18 +557,20 @@ class HASSMap(HASSWidget):
 
         if len(unique_values) != 1: # 0 (shouldn't happen) or >1, add labels foreach
             for value in unique_values:
-                mask = arr == value
+                mask = arr == value # TODO: add masks to a list and use kiosk to highlight each in turn? Add to ax in separate passes...
                 if mask.any():
                     labelled = ndimage.label(mask)
                     for idx in range(labelled[1]):
                         mask_image = labelled[0] == idx
-                        if mask_image.sum() > 128 and mask_image.sum() < ((self.mapsize ** 2) - 128): # number of valid pixels
+                        if mask_image.sum() > 32 and mask_image.sum() < ((self.mapsize ** 2) - 32): # number of valid pixels
                             y,x = ndimage.center_of_mass(mask_image) # row, col
                             x = float(x)/self.mapsize
                             y = (self.mapsize - float(y))/self.mapsize # coords are from top left
                             overlay_text.append({"coords": (x,y), "value": value})
         else: # 1 value, add central label
             overlay_text.append({"coords": (0.5,0.5), "value": unique_values[0]})
+
+        overlay_text = self.snap_labels(overlay_text, 0.25)
 
         #legends, labels
         legend_bbox = dict(alpha = 1, edgecolor = "#000000", facecolor = "#ffffff")
@@ -607,3 +603,39 @@ class HASSMap(HASSWidget):
                 verticalalignment = 'top',
                 horizontalalignment = 'center',
                 bbox = legend_bbox)
+
+    def snap_labels(self, label_list: list[dict], grouping_threshold: float = 0.1) -> list[dict]:
+        # snapping together close-by labels
+        label_coord_list = [x['coords'] for x in label_list]
+        label_value_list = [x['value'] for x in label_list]
+        pairwise_distances = cdist(label_coord_list, label_coord_list)
+
+        # label value: indices of value group members
+        label_groups = defaultdict(list)
+        for idx, value in enumerate(label_value_list):
+            label_groups[value].append(idx)
+
+        label_clustering_results = {}
+
+        # graph-based clustering
+        for id, indices in label_groups.items():
+            if(len(indices) > 1):
+                sub = pairwise_distances[np.ix_(indices, indices)]
+                graph = nx.Graph()
+                graph.add_nodes_from(indices)
+
+                for i_local, i_global in enumerate(indices):
+                    for j_local, j_global in enumerate(indices):
+                        if i_local < j_local and sub[i_local, j_local] < grouping_threshold:
+                            graph.add_edge(i_global, j_global)
+
+                label_clustering_results[id] = [list(comp) for comp in nx.connected_components(graph)]
+
+        new_labels = []
+        labels_to_remove = []
+        for grouping in [x for xs in label_clustering_results.values() for x in xs if len(x) > 1]:
+            new_labels.append({"coords": tuple(map(np.mean, zip(*[p['coords'] for p in [label_list[q] for q in grouping]]))), "value": label_list[grouping[0]]['value']})
+            labels_to_remove = labels_to_remove + grouping
+
+        output_label_list = [x for idx, x in enumerate(label_list) if idx not in labels_to_remove]
+        return output_label_list + new_labels

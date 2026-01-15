@@ -84,7 +84,7 @@ class HASSApp(QtWidgets.QApplication):
     # These are mostly here for debug. Can be removed/deactivated and run silently in widgets
     def on_entities_updated(self, entities):
         # Update all widgets with new entities dict
-        print(str(len(entities)) + " entities refreshed")
+        print("routine fetch, " + str(len(entities)) + " entities refreshed")
 
     def on_entity_state_changed(self, entity):
         # Update only the widget(s) for this entity

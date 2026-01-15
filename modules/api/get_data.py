@@ -4,10 +4,9 @@ import pandas as pd
 import requests_cache
 import config
 from urllib.parse import quote
-from PIL import Image, ImageFilter
+from PIL import Image
 from io import BytesIO
 import xarray as xr
-import tempfile
 import os
 import numpy as np
 
@@ -50,12 +49,14 @@ def get_met_office_grib(file_id: str = None) -> dict:
                      "Accept": "*/*"
                      })
 
-    tmp_path = os.path.join(tempfile.gettempdir(), f"{safe_file_id}.grib2") # Write GRIB bytes to disk 
-    with open(tmp_path, "wb") as f: 
+    raw_path =".cache/met_office/grib_bytes_tmp.grib2"
+    os.makedirs(os.path.dirname(raw_path), exist_ok=True)
+    with open(raw_path, "wb") as f:
         f.write(response.content)
 
-    # get grib2 -> xarray
-    data = xr.open_dataset(tmp_path, engine="cfgrib")
+    data = xr.open_dataset(raw_path,
+                           engine="cfgrib",
+                           backend_kwargs={"indexpath": ""}) # prevent idx file gen
     # find name of primary data key
     primary_key = list(data.data_vars.keys())[0]
 
