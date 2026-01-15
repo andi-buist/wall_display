@@ -1,7 +1,9 @@
 import base64
 import datetime
 import pandas as pd
+import requests
 import requests_cache
+import time
 import config
 from urllib.parse import quote
 from PIL import Image
@@ -13,7 +15,7 @@ import numpy as np
 astro_session = requests_cache.CachedSession('.cache/astro/cached_requests', expire_after=60)
 met_office_session = requests_cache.CachedSession('.cache/met_office/cached_requests', expire_after=3600)
 
-def get_astro_data(lon_lat: tuple, timestamp: str = None) -> list:
+def get_astro_data(lon_lat: tuple, timestamp: str = None, retries: int = 5) -> list:
     userpass = config.astronomy_config['id'] + ":" + config.astronomy_config['secret']
     authString = base64.b64encode(userpass.encode()).decode()
 
@@ -22,32 +24,42 @@ def get_astro_data(lon_lat: tuple, timestamp: str = None) -> list:
     else:
         dt = datetime.datetime.strptime(timestamp, "%Y-%m-%dT%H:%M:%S.%fZ")
 
-    response = astro_session.get("https://api.astronomyapi.com/api/v2/bodies/positions/",
-                 headers = {
-                     "Authorization": "Basic " + authString
-                     },
-                 params = {
-                     "longitude": str(lon_lat[0]),
-                           "latitude": str(lon_lat[1]),
-                           "elevation": str(0),
-                           "from_date": dt.date(),
-                           "to_date": dt.date(),
-                           "time": dt.strftime("%H:%M:%S")
-                           }).json()
+    for attempt in range(retries):
+        try:
+            response = astro_session.get("https://api.astronomyapi.com/api/v2/bodies/positions/",
+                        headers = {
+                            "Authorization": "Basic " + authString
+                            },
+                        params = {
+                            "longitude": str(lon_lat[0]),
+                                "latitude": str(lon_lat[1]),
+                                "elevation": str(0),
+                                "from_date": dt.date(),
+                                "to_date": dt.date(),
+                                "time": dt.strftime("%H:%M:%S")
+                                }).json()
+            break
+        except requests.exceptions.ConnectionError:
+            time.sleep(2 ** attempt)
 
     return [x[0] for x in pd.DataFrame.from_dict(response['data']['table']['rows'])['cells']]
 
-def get_met_office_grib(file_id: str = None) -> dict:
+def get_met_office_grib(file_id: str = None, retries: int = 5) -> dict:
     safe_file_id = quote(file_id + str(datetime.datetime.now().hour), safe="")
 
     api_key = config.met_office_atmospheric_models_config['secret']
     api_url = f"https://data.hub.api.metoffice.gov.uk/atmospheric-models/1.0.0/orders/{config.met_office_atmospheric_models_config['order_id']}/latest/{safe_file_id}/data"
 
-    response = met_office_session.get(api_url,
-                 headers = {
-                     "apikey": api_key,
-                     "Accept": "*/*"
-                     })
+    for attempt in range(retries):
+        try:
+            response = met_office_session.get(api_url,
+                    headers = {
+                        "apikey": api_key,
+                        "Accept": "*/*"
+                        })
+            break
+        except requests.exceptions.ConnectionError:
+            time.sleep(2 ** attempt)
 
     raw_path =".cache/met_office/grib_bytes_tmp.grib2"
     os.makedirs(os.path.dirname(raw_path), exist_ok=True)
