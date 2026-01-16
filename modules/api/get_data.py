@@ -1,3 +1,4 @@
+# TODO: move this to readme eventually
 # many of these get_xxx() functions have equivalents with similar names in widget modules, like map.py.
 # the way I tried to define the separation between the two is that get_data.py get_xxx() functions should 
 # return as much raw-ish data as possible from the API under minimal constraints, producing `something`
