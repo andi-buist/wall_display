@@ -38,9 +38,7 @@ class HASSMap(HASSWidget):
         self.label_size = None
 
         self.map_focus = "all"
-
-        # TODO: rename "overlay" -> "view" throughout?
-        self.overlay = "none"
+        self.view = "map"
 
         self.zones = {}
         self.people = {}
@@ -64,14 +62,14 @@ class HASSMap(HASSWidget):
         self.map_label.setAlignment(QtCore.Qt.AlignCenter)
         map_layout.addWidget(self.map_label)
 
-        # Focus and overlay buttons
+        # Focus and view buttons
         self.focus_button = QtWidgets.QPushButton("Focus: All")
         self.focus_button.clicked.connect(self.toggle_focus)
         button_layout.addWidget(self.focus_button)
 
-        self.overlay_button = QtWidgets.QPushButton("Overlay: None")
-        self.overlay_button.clicked.connect(self.toggle_overlay)
-        button_layout.addWidget(self.overlay_button)
+        self.view_button = QtWidgets.QPushButton("View: Map")
+        self.view_button.clicked.connect(self.toggle_view)
+        button_layout.addWidget(self.view_button)
 
         # Initial map render
         self.update_label()
@@ -116,14 +114,14 @@ class HASSMap(HASSWidget):
             self.focus_button.setText(f"Focus: {self.map_focus.title()}")
         self.update_label()
 
-    # Command invoked to toggle map overlay
-    def toggle_overlay(self):
-        overlay_options = ["none", "astro", "cloud", "temperature", "precipitation", "strava"]
-        idx = overlay_options.index(self.overlay)
-        self.overlay = overlay_options[(idx + 1) % len(overlay_options)]
-        self.overlay_button.setText(f"Overlay: {self.overlay.title()}")
+    # Command invoked to toggle map view
+    def toggle_view(self):
+        view_options = ["map", "astro", "cloud", "temperature", "precipitation", "strava"]
+        idx = view_options.index(self.view)
+        self.view = view_options[(idx + 1) % len(view_options)]
+        self.view_button.setText(f"View: {self.view.title()}")
 
-        if self.overlay == "astro":
+        if self.view == "astro":
             self.kiosk_index = 0
             self.kiosk_timer.start()
         else:
@@ -178,7 +176,7 @@ class HASSMap(HASSWidget):
         
         # TODO: I think we need a zoom level getter - strava in particular needs a dedicated system, so maybe make one-size-fits-all
         # should probably be 1: get_relevant_data() -> calculate_map_extent(data) -> continue with plotting...
-        match self.overlay:
+        match self.view:
             case "cloud"|"temperature"|"precipitation":
                 map_dimension = 2.25 # if looking at weather, zoom out (arbitrary amount)
             case "strava":
@@ -214,8 +212,8 @@ class HASSMap(HASSWidget):
         label_store = []
         
         """Match case for the current display mode"""
-        match self.overlay:
-            case "none":
+        match self.view:
+            case "map":
                 data = self.get_people_movement_data()
                 label_store = self.plt_add_zones(ax, filtered_zones, -map_buffer, label_store)
                 label_store = self.plt_add_people(ax, filtered_people, data, map_buffer, label_store)
@@ -223,10 +221,10 @@ class HASSMap(HASSWidget):
                 data = self.get_astronomy_map_data(lonlat_centroid, extent, (map_dimension/2) + (map_buffer/2))
                 self.plt_add_astronomy(data, ax, lonlat_centroid, extent, (map_dimension/2) + (map_buffer/2)) # +map buffer would have circle perfectly fit square, but we want some allowance for icons
             case "cloud"|"temperature"|"precipitation":
-                self.plt_add_met_office_overlay(ax, extent, type = self.overlay)
+                self.plt_add_met_office_view(ax, extent, type = self.view)
             case "strava":
                 data = self.get_strava_map_data()
-                self.plt_add_strava_overlay(ax, data)
+                self.plt_add_strava_view(ax, data)
     
         # TODO: bundle into plt_add_zones/people? would remove need for plt functions to ingest & spit out label_store, too
         adjust_text(label_store, arrowprops=dict(arrowstyle = '-', color = "#000000", linewidth = 3, zorder = 2))
@@ -522,7 +520,7 @@ class HASSMap(HASSWidget):
                     horizontalalignment = 'center',
                     bbox = legend_bbox)
             
-    def plt_add_strava_overlay(self, ax: plt.Axes, data: dict) -> None:
+    def plt_add_strava_view(self, ax: plt.Axes, data: dict) -> None:
         for poly in data['data']:
             ax.plot([x[1] for x in poly],  # in latlon, plotting expects x:lon, y:lat
                     [x[0] for x in poly],
@@ -532,47 +530,47 @@ class HASSMap(HASSWidget):
                     zorder = 1)
 
     # met office data is just images with some internal data (value meaning, ranges) so there's no getter for this
-    def plt_add_met_office_overlay(self, ax: plt.Axes, extent: tuple[float, float, float, float], type: str = Literal["cloud", "precipitation", "temperature"]) -> None:
+    def plt_add_met_office_view(self, ax: plt.Axes, extent: tuple[float, float, float, float], type: str = Literal["cloud", "precipitation", "temperature"]) -> None:
             result = get_met_office_grib(file_id=token_config['met_office_atmospheric_models_config']['file_id'][type])
-            overlay: Image.Image = result['image'].convert('L')
+            view: Image.Image = result['image'].convert('L')
 
-            # calculations to crop overlay to map extent
-            overlay_extent = token_config['met_office_atmospheric_models_config']['extent']
+            # calculations to crop view to map extent
+            view_extent = token_config['met_office_atmospheric_models_config']['extent']
             # scales - pixels per degree
-            h_scale = overlay.width / (overlay_extent[1] - overlay_extent[0])
-            v_scale = overlay.height / (overlay_extent[3] - overlay_extent[2])
+            h_scale = view.width / (view_extent[1] - view_extent[0])
+            v_scale = view.height / (view_extent[3] - view_extent[2])
 
             #degree differences
-            left_border = extent[0] - overlay_extent[0]
-            right_border = extent[1] - overlay_extent[0]
-            bottom_border = extent[2] - overlay_extent[2]
-            top_border = extent[3] - overlay_extent[2]
+            left_border = extent[0] - view_extent[0]
+            right_border = extent[1] - view_extent[0]
+            bottom_border = extent[2] - view_extent[2]
+            top_border = extent[3] - view_extent[2]
 
             # extent in pixels
             new_extent = (
                 int(left_border * h_scale),
-                overlay.height - int(top_border * v_scale),
+                view.height - int(top_border * v_scale),
                 int(right_border * h_scale),
-                overlay.height - int(bottom_border * v_scale)
+                view.height - int(bottom_border * v_scale)
             )
 
             # crop
-            overlay = overlay.crop(new_extent)
-            overlay = overlay.resize((int(overlay.size[0]/2), int(overlay.size[1]/2)), resample= Image.Resampling.BICUBIC)
-            overlay = overlay.resize((self.label_size, self.label_size), resample= Image.Resampling.BICUBIC)
+            view = view.crop(new_extent)
+            view = view.resize((int(view.size[0]/2), int(view.size[1]/2)), resample= Image.Resampling.BICUBIC)
+            view = view.resize((self.label_size, self.label_size), resample= Image.Resampling.BICUBIC)
             
             # calculate contour label positions, values, etc.
-            arr = np.array(overlay)
+            arr = np.array(view)
 
             quantization_bin = 32
             arr = (arr // quantization_bin) * quantization_bin
 
-            # add overlay to ax
-            overlay = Image.fromarray(255 - arr)
-            overlay.putalpha(196)
-            ax.imshow(overlay, extent=extent)
+            # add view to ax
+            view = Image.fromarray(255 - arr)
+            view.putalpha(196)
+            ax.imshow(view, extent=extent)
 
-            overlay_text = []
+            view_text = []
 
             unique_values = np.unique(arr)
 
@@ -587,24 +585,24 @@ class HASSMap(HASSWidget):
                                 y,x = ndimage.center_of_mass(mask_image) # row, col
                                 x = float(x)/self.label_size
                                 y = (self.label_size - float(y))/self.label_size # coords are from top left
-                                overlay_text.append({"coords": (x,y), "value": value})
+                                view_text.append({"coords": (x,y), "value": value})
             else: # 1 value, add central label
-                overlay_text.append({"coords": (0.5,0.5), "value": unique_values[0]})
+                view_text.append({"coords": (0.5,0.5), "value": unique_values[0]})
 
-            overlay_text = self.snap_labels(overlay_text, 0.25)
+            view_text = self.snap_labels(view_text, 0.25)
 
             #legends, labels
             legend_bbox = dict(alpha = 1, edgecolor = "#000000", facecolor = "#ffffff")
 
             #add contour labels
-            match self.overlay:
+            match self.view:
                 case "cloud"|"precipitation":
-                    [x.update(value = str(int((x['value']/255) * 100)) + "%") for x in overlay_text]
+                    [x.update(value = str(int((x['value']/255) * 100)) + "%") for x in view_text]
                 case "temperature":
-                    [x.update(value = str(int(result['value_range'][0] + ((x['value']/255) *  (result['value_range'][1] - result['value_range'][0])) - 273.15)) + "c") for x in overlay_text] # kelvin to c
+                    [x.update(value = str(int(result['value_range'][0] + ((x['value']/255) *  (result['value_range'][1] - result['value_range'][0])) - 273.15)) + "c") for x in view_text] # kelvin to c
 
 
-            for label in overlay_text:
+            for label in view_text:
                 ax.text(label['coords'][0],
                         label['coords'][1],
                         label['value'],
