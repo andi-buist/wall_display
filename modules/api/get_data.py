@@ -1,3 +1,13 @@
+# many of these get_xxx() functions have equivalents with similar names in widget modules, like map.py.
+# the way I tried to define the separation between the two is that get_data.py get_xxx() functions should 
+# return as much raw-ish data as possible from the API under minimal constraints, producing `something`
+# widget get_xxx() functions should ingest `something` and further manipulate it to make data ingestible for UI
+# functions. e.g. Strava data is tricky and requires several API calls. rather than wrap the Client in multiple
+# match-case statements, I just return the initiated Client after auth. then, the widget get_strava() function can
+# figure out what it wants. e.g.:
+# get_data.get_strava_client() -> `Client` -> map.get_strava_data(args) -> `data` -> map.plt_strava_data() -> END
+# similar logic should go for everything :)
+
 import json
 import base64
 import datetime
