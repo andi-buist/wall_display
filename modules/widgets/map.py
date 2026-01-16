@@ -20,6 +20,7 @@ import cv2
 from scipy.spatial.distance import cdist
 from collections import defaultdict
 import networkx as nx
+import polyline
 
 from .widget_core import *
 from ..caching import *
@@ -110,7 +111,7 @@ class HASSMap(HASSWidget):
 
     # Command invoked to toggle map overlay
     def toggle_overlay(self):
-        overlay_options = ["none", "astro", "cloud", "temperature", "precipitation"]
+        overlay_options = ["none", "astro", "cloud", "temperature", "precipitation", "strava"]
         idx = overlay_options.index(self.overlay)
         self.overlay = overlay_options[(idx + 1) % len(overlay_options)]
         self.overlay_button.setText(f"Overlay: {self.overlay.title()}")
@@ -170,9 +171,13 @@ class HASSMap(HASSWidget):
         lonlat_centroid = (min([x['attributes']['longitude'] for x in people]) + (_lonlat_diff[0]/2),
                             min([x['attributes']['latitude'] for x in people]) + (_lonlat_diff[1]/2))
         
+        # TODO: I think we need a zoom level getter - strava in particular needs a dedicated system, so maybe make one-size-fits-all
+        # should probably be 1: get_relevant_data() -> calculate_map_extent(data) -> continue with plotting...
         match self.overlay:
             case "cloud"|"temperature"|"precipitation":
                 map_dimension = 2.25 # if looking at weather, zoom out (arbitrary amount)
+            case "strava":
+                map_dimension = 0.05
             case _:
                 map_dimension = max(max(_lonlat_diff), _minimum_aspect) # don't zoom in past target
         
@@ -214,6 +219,8 @@ class HASSMap(HASSWidget):
                 self.plt_add_astronomy(self.astro_data, ax, lonlat_centroid, extent, (map_dimension/2) + (map_buffer/2)) # +map buffer would have circle perfectly fit square, but we want some allowance for icons
             case "cloud"|"temperature"|"precipitation":
                 self.plt_add_met_office_overlay(ax, extent, type = self.overlay)
+            case "strava":
+                self.plt_add_strava_overlay(ax)
     
         adjust_text(label_store, arrowprops=dict(arrowstyle = '-', color = "#000000", linewidth = 3, zorder = 2))
         """---End of second plot cycle---"""
@@ -648,3 +655,18 @@ class HASSMap(HASSWidget):
 
         output_label_list = [x for idx, x in enumerate(label_list) if idx not in labels_to_remove]
         return output_label_list + new_labels
+    
+    def plt_add_strava_overlay(self, ax: plt.Axes, type: str = None) -> None:
+        client = get_strava_client()
+
+        activities = client.get_activities(after = (datetime.datetime.today() - datetime.timedelta(days = 1)))
+        data = list(activities)
+
+        for activity in data:
+            poly = polyline.polyline.decode(client.get_activity(activity.id).map.polyline)
+            ax.plot([x[1] for x in poly],  # in latlon, plotting expects x:lon, y:lat
+                    [x[0] for x in poly],
+                    color = "#000",
+                    linewidth = 5,
+                    linestyle = 'solid',
+                    zorder = 1)

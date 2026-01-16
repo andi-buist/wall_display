@@ -88,10 +88,30 @@ def get_met_office_grib(file_id: str = None, retries: int = 5) -> dict:
 
     return {"image": image, "value_range": value_range, "timestamp": response.created_at}
 
-def get_strava_data():
-    
+def get_strava_client() -> stravalib.Client:
+    # strava oauth is a pain
+
+    # process goes:
+    # A1: manually do client.authorization_url(), get code from URL bar after auth
+    # A2: client.exchange_code(code) -> access_token, refresh_token, expiration
+    # The above steps are pretty manual. If someone else is reading this, good luck? follow strava docs/above and then add refresh_token to tokens.json and you'll be fine
+    # B1: every time we call client.refresh_access_token(refresh_token), we get a new access_token and (if expired) new refresh_token(!!!)
+    # B2: (!!!) this then needs to be saved as the new refresh token
+    # and the B loop restarts 
+
     client = stravalib.Client()
 
-    activities = client.get_activities(after = (datetime.datetime.today() - datetime.timedelta(days = 7)))
-    data = list(activities)
-    return data
+    init_response = client.refresh_access_token(
+        client_id=token_config['strava_config']['client_id'],
+        client_secret=token_config['strava_config']['client_secret'],
+        refresh_token=token_config['strava_config']['refresh_token']
+    )
+
+    # write new refresh token, restart token loop
+    token_config['strava_config']['refresh_token'] = init_response['refresh_token']
+    with open("tokens.json", "w") as f:
+        f.write(json.dumps(token_config, indent=4))
+
+    client.access_token = init_response['access_token']
+
+    return client
