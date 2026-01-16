@@ -7,6 +7,7 @@ from PIL import Image, ImageEnhance, ImageOps
 import matplotlib
 import matplotlib.pyplot as plt
 import matplotlib.patches as patches
+from matplotlib.backends import backend_agg
 from matplotlib.offsetbox import OffsetImage, AnnotationBbox
 from adjustText import adjust_text
 import cartopy
@@ -16,11 +17,12 @@ import math
 from typing import Literal
 from scipy import ndimage
 import numpy as np
-import cv2
 from scipy.spatial.distance import cdist
 from collections import defaultdict
 import networkx as nx
 import polyline
+import starplot
+from starplot import _
 
 from .widget_core import *
 from ..caching import *
@@ -133,8 +135,8 @@ class HASSMap(HASSWidget):
     def update_label(self):
         self.label_size = int(min((self.width(), self.height())) * 0.875)
 
-        # main call to map generator
-        image = self.get_data_vis_image()
+        # main call to image generator
+        image = self.get_visuals()
 
         # generic image as a placeholder (when no data)
         if not image:
@@ -153,7 +155,7 @@ class HASSMap(HASSWidget):
         self.map_label.setPixmap(pixmap)
 
     """Getter Functions"""
-    def get_data_vis_image(self, **kwargs) -> Image.Image:
+    def get_visuals(self, **kwargs) -> Image.Image:
         if len(self.zones) == 0 and len(self.people) == 0:
             return None
         
@@ -164,65 +166,65 @@ class HASSMap(HASSWidget):
         # if focus is a person, filter people to that person
         if self.map_focus in self.entities.keys():
            filtered_people = {entity_id: entity for entity_id, entity in filtered_people.items() if  self.map_focus in entity_id}
-        
-        # map extent
-        _minimum_aspect = 0.0015
-        _map_buffer_amount = 0.1
-
-        _lonlat_diff = (max([x['attributes']['longitude'] for x in filtered_people.values()]) - min([x['attributes']['longitude'] for x in filtered_people.values()]),
-                        max([x['attributes']['latitude'] for x in filtered_people.values()]) - min([x['attributes']['latitude'] for x in filtered_people.values()]))
-        lonlat_centroid = (min([x['attributes']['longitude'] for x in filtered_people.values()]) + (_lonlat_diff[0]/2),
-                            min([x['attributes']['latitude'] for x in filtered_people.values()]) + (_lonlat_diff[1]/2))
-        
-        # TODO: I think we need a zoom level getter - strava in particular needs a dedicated system, so maybe make one-size-fits-all
-        # should probably be 1: get_relevant_data() -> calculate_map_extent(data) -> continue with plotting...
-        match self.view:
-            case "cloud"|"temperature"|"precipitation":
-                map_dimension = 2.25 # if looking at weather, zoom out (arbitrary amount)
-            case "strava":
-                map_dimension = 0.05
-            case _:
-                map_dimension = max(max(_lonlat_diff), _minimum_aspect) # don't zoom in past target
-        
-        map_buffer = map_dimension * _map_buffer_amount
-
-        extent = [
-            lonlat_centroid[0] - (map_dimension/2) - map_buffer,
-            lonlat_centroid[0] + (map_dimension/2) + map_buffer,
-            lonlat_centroid[1] - (map_dimension/2) - map_buffer,
-            lonlat_centroid[1] + (map_dimension/2) + map_buffer,
-            ]
-
-        #filter to ensure not rendering tile content out of bounds
-        filtered_zones = self.filter_entities_to_extent(filtered_zones, extent)
-        filtered_people = self.filter_entities_to_extent(filtered_people, extent)
 
         # map plot setup ----
         plt.rcParams['font.family'] = "Nintendo DS BIOS"
-
-        # get map image for given
-        map_bg = self.get_map_image(self.label_size, extent, map_dimension, _minimum_aspect, 128, 1)
-
-        fig, ax = plt.subplots(figsize = (8,8))
-        plt.axis('off')
-        ax.set_xlim(extent[0], extent[1])
-        ax.set_ylim(extent[2], extent[3])
-        ax.imshow(map_bg, extent = extent)
 
         label_store = []
         
         """Match case for the current display mode"""
         match self.view:
             case "map":
+                extent = self.calculate_extent([(entity['attributes']['longitude'], entity['attributes']['latitude']) for entity in filtered_people.values()])
+                filtered_zones = self.filter_entities_to_extent(filtered_zones, extent['extent']) # remove zones out of view
+
+                map_bg = self.get_map_image(self.label_size, extent['extent'], extent['dimension'], extent['min_dimension'], 128, 1)
+
+                fig, ax = plt.subplots(figsize = (8,8))
+                plt.axis('off')
+                ax.set_xlim(extent['extent'][0], extent['extent'][1])
+                ax.set_ylim(extent['extent'][2], extent['extent'][3])
+                ax.imshow(map_bg, extent = extent['extent'])
+
                 data = self.get_people_movement_data()
-                label_store = self.plt_add_zones(ax, filtered_zones, -map_buffer, label_store)
-                label_store = self.plt_add_people(ax, filtered_people, data, map_buffer, label_store)
+                label_store = self.plt_add_zones(ax, filtered_zones, -extent['buffer'], label_store)
+                label_store = self.plt_add_people(ax, filtered_people, data, extent['buffer'], label_store)
             case "astro":
-                data = self.get_astronomy_map_data(lonlat_centroid, extent, (map_dimension/2) + (map_buffer/2))
-                self.plt_add_astronomy(data, ax, lonlat_centroid, extent, (map_dimension/2) + (map_buffer/2)) # +map buffer would have circle perfectly fit square, but we want some allowance for icons
+                extent = self.calculate_extent([(entity['attributes']['longitude'], entity['attributes']['latitude']) for entity in filtered_people.values()])
+
+                map_bg = self.get_map_image(self.label_size, extent['extent'], extent['dimension'], extent['min_dimension'], 128, 1)
+
+                fig, ax = plt.subplots(figsize = (8,8))
+                plt.axis('off')
+                ax.set_xlim(extent['extent'][0], extent['extent'][1])
+                ax.set_ylim(extent['extent'][2], extent['extent'][3])
+                ax.imshow(map_bg, extent = extent['extent'])
+
+                data = self.get_astronomy_map_data(extent['centre'], extent['extent'], (extent['dimension']/2) + (extent['buffer']/2))
+                self.plt_add_astronomy(data, ax, extent['centre'], extent['extent'], (extent['dimension']/2) + (extent['buffer']/2)) # +map buffer would have circle perfectly fit square, but we want some allowance for icons
             case "cloud"|"temperature"|"precipitation":
-                self.plt_add_met_office_view(ax, extent, type = self.view)
+                extent = self.calculate_extent([(entity['attributes']['longitude'], entity['attributes']['latitude']) for entity in filtered_people.values()], extent_dimension = 2.25)
+                
+                map_bg = self.get_map_image(self.label_size, extent['extent'], extent['dimension'], extent['min_dimension'], 128, 1)
+
+                fig, ax = plt.subplots(figsize = (8,8))
+                plt.axis('off')
+                ax.set_xlim(extent['extent'][0], extent['extent'][1])
+                ax.set_ylim(extent['extent'][2], extent['extent'][3])
+                ax.imshow(map_bg, extent = extent['extent'])
+
+                self.plt_add_met_office_view(ax, extent['extent'], type = self.view)
             case "strava":
+                extent = self.calculate_extent([(entity['attributes']['longitude'], entity['attributes']['latitude']) for entity in filtered_people.values()], extent_dimension = 0.05)
+
+                map_bg = self.get_map_image(self.label_size, extent['extent'], extent['dimension'], extent['min_dimension'], 128, 1)
+
+                fig, ax = plt.subplots(figsize = (8,8))
+                plt.axis('off')
+                ax.set_xlim(extent['extent'][0], extent['extent'][1])
+                ax.set_ylim(extent['extent'][2], extent['extent'][3])
+                ax.imshow(map_bg, extent = extent['extent'])
+
                 data = self.get_strava_map_data()
                 self.plt_add_strava_view(ax, data)
     
@@ -624,6 +626,32 @@ class HASSMap(HASSWidget):
                     bbox = legend_bbox)
 
     """Tool Functions (for getter/plotter)"""
+    def calculate_extent(self, lon_lat: list[tuple[float,float]], buffer_amount: float = 0.1, extent_dimension: float = None, min_dimension: float = 0.0015) -> dict:
+        lon_values = [x[0] for x in lon_lat]
+        lat_values = [x[1] for x in lon_lat]
+        
+        lonlat_diff = (max(lon_values) - min(lon_values),
+                        max(lat_values) - min(lat_values))
+        lonlat_centre = (min(lon_values) + (lonlat_diff[0]/2),
+                            min(lat_values) + (lonlat_diff[1]/2))
+        
+        if not extent_dimension:
+            extent_dimension = max(max(lonlat_diff), min_dimension) # don't zoom in past target
+
+        extent_buffer = extent_dimension * buffer_amount
+
+        return {"extent": (
+            lonlat_centre[0] - (extent_dimension/2) - extent_buffer,
+            lonlat_centre[0] + (extent_dimension/2) + extent_buffer,
+            lonlat_centre[1] - (extent_dimension/2) - extent_buffer,
+            lonlat_centre[1] + (extent_dimension/2) + extent_buffer
+            ),
+            "centre": lonlat_centre,
+            "buffer": extent_buffer,
+            "dimension": extent_dimension,
+            "min_dimension": min_dimension
+            }
+
     def filter_entities_to_extent(self, entities: dict, extent: list) -> list:
         return {entity_id: entity for entity_id, entity in entities.items() if 
             entity['attributes']['longitude'] >= extent[0] and 
