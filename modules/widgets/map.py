@@ -104,10 +104,16 @@ class HASSMap(HASSWidget):
 
     # Command invoked to toggle map focus (person)
     def toggle_focus(self):
-        focus_options = ["all"] + list(self.people.keys())
+        focus_options = ["all"] + sorted(list(self.people.keys()))
+
         idx = focus_options.index(self.map_focus) if self.map_focus in focus_options else 0
         self.map_focus = focus_options[(idx + 1) % len(focus_options)]
-        self.focus_button.setText(f"Focus: {self.map_focus.title()}")
+
+        # if focus is a valid person, get their name, else just nicely format the focus name
+        if self.map_focus in self.people.keys():
+            self.focus_button.setText(f"Focus: {self.people[self.map_focus]['attributes']['friendly_name']}")
+        else:
+            self.focus_button.setText(f"Focus: {self.map_focus.title()}")
         self.update_label()
 
     # Command invoked to toggle map overlay
