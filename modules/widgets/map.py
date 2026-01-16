@@ -35,13 +35,15 @@ cartopy.config['cache_dir'] = "./.cache/cartopy/"
 class HASSMap(HASSWidget):
     def __init__(self, data_manager, parent=None):
         super().__init__(data_manager, entity_types=["person", "zone"], entity_ids=None, parent=parent)
-        self.mapsize = None
+        self.label_size = None
 
         self.map_focus = "all"
+
+        # TODO: rename "overlay" -> "view" throughout?
         self.overlay = "none"
 
-        self.zones = []
-        self.people = []
+        self.zones = {}
+        self.people = {}
 
         # "kiosk" things can be latched to to slowly change visuals over time
         self.kiosk_index = 0
@@ -72,13 +74,13 @@ class HASSMap(HASSWidget):
         button_layout.addWidget(self.overlay_button)
 
         # Initial map render
-        self.update_map()
+        self.update_label()
 
     def on_entities_update(self, entities):
         # Update zones and people lists, then redraw map
-        self.zones = [entity for id, entity in entities.items() if 'zone' in id]
-        self.people = [entity for id, entity in entities.items() if 'person' in id]
-        self.update_map()
+        self.zones = {id: entity for id, entity in entities.items() if 'zone' in id}
+        self.people = {id: entity for id, entity in entities.items() if 'person' in id}
+        self.update_label()
 
     def on_entity_update(self, entity):
         # Update a single entity and redraw map if relevant
@@ -98,15 +100,15 @@ class HASSMap(HASSWidget):
     # when kiosk timer triggers, tick index up, update map
     def on_kiosk_timer_next(self):
         self.kiosk_index += 1
-        self.update_map()
+        self.update_label()
 
     # Command invoked to toggle map focus (person)
     def toggle_focus(self):
-        focus_options = ["all"] + [x['entity_id'] for x in self.people]
+        focus_options = ["all"] + list(self.people.keys())
         idx = focus_options.index(self.map_focus) if self.map_focus in focus_options else 0
         self.map_focus = focus_options[(idx + 1) % len(focus_options)]
         self.focus_button.setText(f"Focus: {self.map_focus.title()}")
-        self.update_map()
+        self.update_label()
 
     # Command invoked to toggle map overlay
     def toggle_overlay(self):
@@ -122,50 +124,51 @@ class HASSMap(HASSWidget):
             self.kiosk_index = 0
             self.kiosk_timer.stop()
 
-        self.update_map()
+        self.update_label()
 
-    def update_map(self):
-        self.mapsize = int(min((self.width(), self.height())) * 0.875)
+    def update_label(self):
+        self.label_size = int(min((self.width(), self.height())) * 0.875)
 
         # main call to map generator
-        pil_img = self.generate_map()
+        image = self.get_data_vis_image()
 
         # generic image as a placeholder (when no data)
-        if not pil_img:
-            image = Image.open(theme.filestore['ui']['img']['globe'])
-            image = image.resize((self.mapsize, self.mapsize), resample= Image.Resampling.NEAREST)
-            image = image.convert('1')
-            pil_img = image
+        if not image:
+            placeholder_image = Image.open(theme.filestore['ui']['img']['globe'])
+            placeholder_image = placeholder_image.resize((self.label_size, self.label_size), resample= Image.Resampling.NEAREST)
+            placeholder_image = placeholder_image.convert('1')
+            image = placeholder_image
 
-        pil_img = pil_img.crop((1, 1, pil_img.width - 1, pil_img.height - 1))
-        pil_img = ImageOps.expand(pil_img, 1, fill = "#000000")
+        image = image.crop((1, 1, image.width - 1, image.height - 1))
+        image = ImageOps.expand(image, 1, fill = "#000000")
 
         data = BytesIO()
-        pil_img.save(data, format="PNG")
+        image.save(data, format="PNG")
         qimg = QImage.fromData(data.getvalue())
         pixmap = QPixmap.fromImage(qimg)
         self.map_label.setPixmap(pixmap)
-    
-    def generate_map(self, **kwargs) -> Image:
-        zones = self.zones
-        people = self.people
 
-        if len(zones) == 0 and len(people) == 0:
+    """Getter Functions"""
+    def get_data_vis_image(self, **kwargs) -> Image.Image:
+        if len(self.zones) == 0 and len(self.people) == 0:
             return None
-
-        # if focus is a person, filter people to that person, else (probably "All"), do nothing
-        if self.map_focus in self.entities.keys():
-            people = [entity for id, entity in self.entities.items() if self.map_focus in id]
-
         
-        """Calculating map extent"""
+        # copy self.zones/people to filter to needed
+        filtered_zones = self.zones
+        filtered_people = self.people
+
+        # if focus is a person, filter people to that person
+        if self.map_focus in self.entities.keys():
+           filtered_people = {entity_id: entity for entity_id, entity in filtered_people.items() if  self.map_focus in entity_id}
+        
+        # map extent
         _minimum_aspect = 0.0015
         _map_buffer_amount = 0.1
 
-        _lonlat_diff = (max([x['attributes']['longitude'] for x in people]) - min([x['attributes']['longitude'] for x in people]),
-                        max([x['attributes']['latitude'] for x in people]) - min([x['attributes']['latitude'] for x in people]))
-        lonlat_centroid = (min([x['attributes']['longitude'] for x in people]) + (_lonlat_diff[0]/2),
-                            min([x['attributes']['latitude'] for x in people]) + (_lonlat_diff[1]/2))
+        _lonlat_diff = (max([x['attributes']['longitude'] for x in filtered_people.values()]) - min([x['attributes']['longitude'] for x in filtered_people.values()]),
+                        max([x['attributes']['latitude'] for x in filtered_people.values()]) - min([x['attributes']['latitude'] for x in filtered_people.values()]))
+        lonlat_centroid = (min([x['attributes']['longitude'] for x in filtered_people.values()]) + (_lonlat_diff[0]/2),
+                            min([x['attributes']['latitude'] for x in filtered_people.values()]) + (_lonlat_diff[1]/2))
         
         # TODO: I think we need a zoom level getter - strava in particular needs a dedicated system, so maybe make one-size-fits-all
         # should probably be 1: get_relevant_data() -> calculate_map_extent(data) -> continue with plotting...
@@ -187,17 +190,15 @@ class HASSMap(HASSWidget):
             ]
 
         #filter to ensure not rendering tile content out of bounds
-        zones = self.filter_entities_to_extent(zones, extent)
-        people = self.filter_entities_to_extent(people, extent)
+        filtered_zones = self.filter_entities_to_extent(filtered_zones, extent)
+        filtered_people = self.filter_entities_to_extent(filtered_people, extent)
 
         # map plot setup ----
         plt.rcParams['font.family'] = "Nintendo DS BIOS"
-        
-        """---First plot cycle: used to fetch tiles, apply enhancements, save to image. Used as bg of second plot cycle---"""
-        map_bg = self.get_map_image(self.mapsize, extent, map_dimension, _minimum_aspect, 128, 1)
-        """---End of first plot cycle---"""
 
-        """---Second plot cycle---"""
+        # get map image for given
+        map_bg = self.get_map_image(self.label_size, extent, map_dimension, _minimum_aspect, 128, 1)
+
         fig, ax = plt.subplots(figsize = (8,8))
         plt.axis('off')
         ax.set_xlim(extent[0], extent[1])
@@ -210,8 +211,8 @@ class HASSMap(HASSWidget):
         match self.overlay:
             case "none":
                 data = self.get_people_movement_data()
-                label_store = self.plt_add_zones(ax, zones, -map_buffer, label_store)
-                label_store = self.plt_add_people(ax, people, data, map_buffer, label_store)
+                label_store = self.plt_add_zones(ax, filtered_zones, -map_buffer, label_store)
+                label_store = self.plt_add_people(ax, filtered_people, data, map_buffer, label_store)
             case "astro":
                 data = self.get_astronomy_map_data(lonlat_centroid, extent, (map_dimension/2) + (map_buffer/2))
                 self.plt_add_astronomy(data, ax, lonlat_centroid, extent, (map_dimension/2) + (map_buffer/2)) # +map buffer would have circle perfectly fit square, but we want some allowance for icons
@@ -230,12 +231,11 @@ class HASSMap(HASSWidget):
         plt.close()
 
         image = Image.open(image_buffer)
-        image = image.resize((self.mapsize, self.mapsize), resample= Image.Resampling.NEAREST)
+        image = image.resize((self.label_size, self.label_size), resample= Image.Resampling.NEAREST)
         image = image.convert('1')
 
         return image
 
-    """Getter Functions"""
     def get_map_image(self, size: int, extent: list, aspect: float, min_aspect: float, brightness: float, contrast: float) -> Image.Image:
         match math.floor(math.log2(aspect / min_aspect)):
             case 0: _zoom_level = 17
@@ -280,9 +280,9 @@ class HASSMap(HASSWidget):
     
     def get_people_movement_data(self) -> dict:
         data = {}
-        for entity in self.people:
+        for entity_id, entity in self.people.items():
             #get position history if present, else make, trim to most recent N and append current
-            position_history = localcache_read("./data/person_position_log.json", entity['entity_id'])
+            position_history = localcache_read("./data/person_position_log.json", entity_id)
             _current_position = [entity['attributes']['longitude'], entity['attributes']['latitude']]
 
             if len(position_history) > 0:
@@ -293,11 +293,11 @@ class HASSMap(HASSWidget):
 
             if len(position_history) == 0 or _current_position != _latest_position:
                 localcache_write("./data/person_position_log.json",
-                                 entity['entity_id'],
+                                 entity_id,
                                  dateutil.parser.parse(entity['last_updated']).timestamp(),
                                  _current_position,
                                  12) # assign back
-            data[entity['entity_id']] = position_history
+            data[entity_id] = position_history
         return data
 
     def get_astronomy_map_data(self, lon_lat: tuple, extent: list, max_radius: float) -> dict:
@@ -364,9 +364,9 @@ class HASSMap(HASSWidget):
         return {"type": type, "data": data}
 
     """Plotter Functions"""
-    def plt_add_zones(self, ax: plt.Axes, zones: list[dict], label_offset: float, label_store: list) -> list:
+    def plt_add_zones(self, ax: plt.Axes, zones: dict, label_offset: float, label_store: list) -> list:
         label_store = label_store
-        for entity in zones:
+        for entity in zones.values():
             if len(entity['attributes']['persons']) > 0:
                 #point
                 ax.plot(entity['attributes']['longitude'], 
@@ -395,9 +395,9 @@ class HASSMap(HASSWidget):
                         zorder = 2)
         return label_store
     
-    def plt_add_people(self, ax: plt.Axes, people: list[dict], data: dict, label_offset: float, label_store: list) -> list:
+    def plt_add_people(self, ax: plt.Axes, people: dict, data: dict, label_offset: float, label_store: list) -> list:
         label_store = label_store
-        for entity in people:
+        for entity in people.values():
             # point
             ax.plot(entity['attributes']['longitude'], 
                     entity['attributes']['latitude'],
@@ -553,7 +553,7 @@ class HASSMap(HASSWidget):
             # crop
             overlay = overlay.crop(new_extent)
             overlay = overlay.resize((int(overlay.size[0]/2), int(overlay.size[1]/2)), resample= Image.Resampling.BICUBIC)
-            overlay = overlay.resize((self.mapsize, self.mapsize), resample= Image.Resampling.BICUBIC)
+            overlay = overlay.resize((self.label_size, self.label_size), resample= Image.Resampling.BICUBIC)
             
             # calculate contour label positions, values, etc.
             arr = np.array(overlay)
@@ -577,10 +577,10 @@ class HASSMap(HASSWidget):
                         label_arr, n_labels = ndimage.label(mask)
                         for idx in range(1, n_labels + 1):
                             mask_image = label_arr == idx
-                            if mask_image.sum() > 32 and mask_image.sum() < ((self.mapsize ** 2) - 32): # number of valid pixels
+                            if mask_image.sum() > 32 and mask_image.sum() < ((self.label_size ** 2) - 32): # number of valid pixels
                                 y,x = ndimage.center_of_mass(mask_image) # row, col
-                                x = float(x)/self.mapsize
-                                y = (self.mapsize - float(y))/self.mapsize # coords are from top left
+                                x = float(x)/self.label_size
+                                y = (self.label_size - float(y))/self.label_size # coords are from top left
                                 overlay_text.append({"coords": (x,y), "value": value})
             else: # 1 value, add central label
                 overlay_text.append({"coords": (0.5,0.5), "value": unique_values[0]})
@@ -620,12 +620,12 @@ class HASSMap(HASSWidget):
                     bbox = legend_bbox)
 
     """Tool Functions (for getter/plotter)"""
-    def filter_entities_to_extent(self, entity_list: list[dict], extent: list) -> list:
-        return [x for x in entity_list if 
-            x['attributes']['longitude'] >= extent[0] and 
-            x['attributes']['longitude'] <= extent[1] and
-            x['attributes']['latitude'] >= extent[2] and 
-            x['attributes']['latitude'] <= extent[3]]
+    def filter_entities_to_extent(self, entities: dict, extent: list) -> list:
+        return {entity_id: entity for entity_id, entity in entities.items() if 
+            entity['attributes']['longitude'] >= extent[0] and 
+            entity['attributes']['longitude'] <= extent[1] and
+            entity['attributes']['latitude'] >= extent[2] and 
+            entity['attributes']['latitude'] <= extent[3]}
 
     def alt_az_to_viewport(self, alt_az: tuple, lon_lat: tuple, extent: list, max_radius: float) -> tuple[int,int]:
             #convert to lon lat at origin where circle bounds viewport square
