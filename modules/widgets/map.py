@@ -347,7 +347,7 @@ class HASSMap(HASSWidget):
                 case 'moon':
                     try:
                         # moon phase icon fetch
-                        data[body_id]["icon"] = plt.imread(theme.filestore['ui']['icons']['astro']["moon_" + body['extraInfo']['phase']['string'].replace(" ", "_").lower()])
+                        data[body_id]["icon"] = plt.imread(theme.filestore['ui']['icons']['astro']["moon_" + data[body_id]['extraInfo']['phase']['string'].replace(" ", "_").lower()])
                     except:
                         # api returned unknown phase, show the confused moon!
                         data[body_id]["icon"] = plt.imread(theme.filestore['ui']['icons']['astro']["moon_bug"])
