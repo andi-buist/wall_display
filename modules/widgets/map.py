@@ -7,7 +7,6 @@ from PIL import Image, ImageEnhance, ImageOps
 import matplotlib
 import matplotlib.pyplot as plt
 import matplotlib.patches as patches
-from matplotlib.backends import backend_agg
 from matplotlib.offsetbox import OffsetImage, AnnotationBbox
 from adjustText import adjust_text
 import cartopy
@@ -21,8 +20,6 @@ from scipy.spatial.distance import cdist
 from collections import defaultdict
 import networkx as nx
 import polyline
-import starplot
-from starplot import _
 
 from .widget_core import *
 from ..caching import *
@@ -176,14 +173,11 @@ class HASSMap(HASSWidget):
         match self.view:
             case "map":
                 extent = self.calculate_extent([(entity['attributes']['longitude'], entity['attributes']['latitude']) for entity in filtered_people.values()])
-                filtered_zones = self.filter_entities_to_extent(filtered_zones, extent['extent']) # remove zones out of view
-
                 map_bg = self.get_map_image(self.label_size, extent['extent'], extent['dimension'], extent['min_dimension'], 128, 1)
 
-                fig, ax = plt.subplots(figsize = (8,8))
-                plt.axis('off')
-                ax.set_xlim(extent['extent'][0], extent['extent'][1])
-                ax.set_ylim(extent['extent'][2], extent['extent'][3])
+                filtered_zones = self.filter_entities_to_extent(filtered_zones, extent['extent']) # remove zones out of view
+
+                fig, ax = self.plt_make(extent)
                 ax.imshow(map_bg, extent = extent['extent'])
 
                 data = self.get_people_movement_data()
@@ -191,41 +185,30 @@ class HASSMap(HASSWidget):
                 label_store = self.plt_add_people(ax, filtered_people, data, extent['buffer'], label_store)
             case "astro":
                 extent = self.calculate_extent([(entity['attributes']['longitude'], entity['attributes']['latitude']) for entity in filtered_people.values()])
-
                 map_bg = self.get_map_image(self.label_size, extent['extent'], extent['dimension'], extent['min_dimension'], 128, 1)
 
-                fig, ax = plt.subplots(figsize = (8,8))
-                plt.axis('off')
-                ax.set_xlim(extent['extent'][0], extent['extent'][1])
-                ax.set_ylim(extent['extent'][2], extent['extent'][3])
+                fig, ax = self.plt_make(extent)
                 ax.imshow(map_bg, extent = extent['extent'])
 
                 data = self.get_astronomy_map_data(extent['centre'], extent['extent'], (extent['dimension']/2) + (extent['buffer']/2))
                 self.plt_add_astronomy(data, ax, extent['centre'], extent['extent'], (extent['dimension']/2) + (extent['buffer']/2)) # +map buffer would have circle perfectly fit square, but we want some allowance for icons
             case "cloud"|"temperature"|"precipitation":
                 extent = self.calculate_extent([(entity['attributes']['longitude'], entity['attributes']['latitude']) for entity in filtered_people.values()], extent_dimension = 2.25)
-                
                 map_bg = self.get_map_image(self.label_size, extent['extent'], extent['dimension'], extent['min_dimension'], 128, 1)
 
-                fig, ax = plt.subplots(figsize = (8,8))
-                plt.axis('off')
-                ax.set_xlim(extent['extent'][0], extent['extent'][1])
-                ax.set_ylim(extent['extent'][2], extent['extent'][3])
+                fig, ax = self.plt_make(extent)
                 ax.imshow(map_bg, extent = extent['extent'])
 
                 self.plt_add_met_office_view(ax, extent['extent'], type = self.view)
             case "strava":
-                extent = self.calculate_extent([(entity['attributes']['longitude'], entity['attributes']['latitude']) for entity in filtered_people.values()], extent_dimension = 0.05)
+                data = self.get_strava_map_data()
 
+                extent = self.calculate_extent([x for xs in data['data'].values() for x in xs])
                 map_bg = self.get_map_image(self.label_size, extent['extent'], extent['dimension'], extent['min_dimension'], 128, 1)
 
-                fig, ax = plt.subplots(figsize = (8,8))
-                plt.axis('off')
-                ax.set_xlim(extent['extent'][0], extent['extent'][1])
-                ax.set_ylim(extent['extent'][2], extent['extent'][3])
+                fig, ax = self.plt_make(extent)
                 ax.imshow(map_bg, extent = extent['extent'])
 
-                data = self.get_strava_map_data()
                 self.plt_add_strava_view(ax, data)
     
         # TODO: bundle into plt_add_zones/people? would remove need for plt functions to ingest & spit out label_store, too
@@ -306,7 +289,7 @@ class HASSMap(HASSWidget):
             data[entity_id] = position_history
         return data
 
-    def get_astronomy_map_data(self, lon_lat: tuple, extent: list, max_radius: float) -> dict:
+    def get_astronomy_map_data(self, lon_lat: tuple, extent: dict, max_radius: float) -> dict:
         # create a list of permitted celestial bodies
         allowed_bodies = ['sun', 'moon', 'mercury', 'venus', 'mars', 'jupiter', 'saturn', 'uranus', 'neptune']
                     
@@ -363,13 +346,23 @@ class HASSMap(HASSWidget):
 
     def get_strava_map_data(self, type: str = None) -> dict:
         client = get_strava_client()
-
         activities = client.get_activities(after = (datetime.datetime.today() - datetime.timedelta(days = 1)))
-        data = [polyline.polyline.decode(client.get_activity(activity.id).map.polyline) for activity in list(activities)]
 
-        return {"type": type, "data": data}
+        data = {"type": type, "data": {}}
+        for activity in activities:
+            detailed_activity = client.get_activity(activity.id)
+            data['data'][str(detailed_activity.id)] = [(x[1],x[0]) for x in polyline.polyline.decode(detailed_activity.map.polyline)] # need to flip to lon_lat
+
+        return data
 
     """Plotter Functions"""
+    def plt_make(self, extent: dict):
+        fig, ax = plt.subplots(figsize = (8,8))
+        plt.axis('off')
+        ax.set_xlim(extent['extent'][0], extent['extent'][1])
+        ax.set_ylim(extent['extent'][2], extent['extent'][3])
+        return fig, ax
+
     def plt_add_zones(self, ax: plt.Axes, zones: dict, label_offset: float, label_store: list) -> list:
         label_store = label_store
         for entity in zones.values():
@@ -523,9 +516,9 @@ class HASSMap(HASSWidget):
                     bbox = legend_bbox)
             
     def plt_add_strava_view(self, ax: plt.Axes, data: dict) -> None:
-        for poly in data['data']:
-            ax.plot([x[1] for x in poly],  # in latlon, plotting expects x:lon, y:lat
-                    [x[0] for x in poly],
+        for poly in data['data'].values():
+            ax.plot([x[0] for x in poly],
+                    [x[1] for x in poly],
                     color = "#000",
                     linewidth = 5,
                     linestyle = 'solid',
