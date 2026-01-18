@@ -53,15 +53,18 @@ def localcache_write(filepath: str, id: str, timestamp: float, value: any, hr_li
             json.dump(history, file_write)
             file_write.close()
     
-def localcache_read(filepath: str, id: str):
+def localcache_read(filepath: str, id: str = None):
     if Path(filepath).is_file():
         with open(filepath) as json_data:
             history = json.load(json_data)
             json_data.close()
 
-        if id in history.keys():
-            return history[id]
+        if id:
+            if id in history.keys():
+                return history[id]
+            else:
+                return {}
         else:
-            return {}
+            return history
     else:
         return {}

@@ -126,18 +126,20 @@ class HASSMap(HASSWidget):
 
     # Command invoked to toggle map view
     def toggle_view(self):
-        view_options = ["map", "astronomy", "bluh", "cloud", "temperature", "precipitation", "strava"]
+        view_options = ["map", "astronomy", "cloud", "temperature", "precipitation", "strava"]
         idx = view_options.index(self.view)
         self.view = view_options[(idx + 1) % len(view_options)]
         self.view_button.setText(f"View: {self.view.title()}")
 
         # kiosk timer controls
-        if self.view in ["astronomy"]:
-            self.kiosk_index = 0
-            self.kiosk_timer.start()
-        else:
-            self.kiosk_index = 0
-            self.kiosk_timer.stop()
+        match self.view:
+            case "astronomy" | "strava":
+                self.kiosk_index = 0
+                self.kiosk_timer.setInterval(10000)
+                self.kiosk_timer.start()
+            case _:
+                self.kiosk_index = 0
+                self.kiosk_timer.stop()
 
         self.update_label()
 
@@ -148,15 +150,17 @@ class HASSMap(HASSWidget):
             # main call to image generator
             image = self.get_visuals()
 
-            image = image.crop((1, 1, image.width - 1, image.height - 1))
-            image = ImageOps.expand(image, 1, fill = "#000000")
+            if image:
+                image = image.crop((1, 1, image.width - 1, image.height - 1))
+                image = ImageOps.expand(image, 1, fill = "#000000")
 
-            data = BytesIO()
-            image.save(data, format="PNG")
-            qimg = QImage.fromData(data.getvalue())
-            pixmap = QPixmap.fromImage(qimg)
-            self.view_label.setPixmap(pixmap)
-            self.view_label_info.clear() # TODO: move this set to each view match case for data
+                data = BytesIO()
+                image.save(data, format="PNG")
+                qimg = QImage.fromData(data.getvalue())
+                pixmap = QPixmap.fromImage(qimg)
+                self.view_label.setPixmap(pixmap)
+            else:
+                self.view_label.setText("Loading...")
         except Exception as e:
             # generic image as a placeholder (when no data)
             image = Image.open(theme.filestore['ui']['img']['bug'])
@@ -205,6 +209,8 @@ class HASSMap(HASSWidget):
                 data = self.get_people_movement_data()
                 label_store = self.plt_add_zones(ax, filtered_zones, -extent['buffer'], label_store)
                 label_store = self.plt_add_people(ax, filtered_people, data, extent['buffer'], label_store)
+
+                self.view_label_info.clear()
             case "astronomy":
                 extent = self.calculate_extent([(entity['attributes']['longitude'], entity['attributes']['latitude']) for entity in filtered_people.values()])
                 map_bg = self.get_map_image(self.label_size, extent['extent'], extent['dimension'], extent['min_dimension'], 128, 1)
@@ -215,6 +221,8 @@ class HASSMap(HASSWidget):
                 data = self.get_astronomy_map_data(token_config["astronomy_lon_lat"], extent['extent'], (extent['dimension']/2) + (extent['buffer']/2))
                 data = self.kiosk_select_data(data)
                 self.plt_add_astronomy(data, ax, extent['centre'], extent['extent'], (extent['dimension']/2) + (extent['buffer']/2)) # +map buffer would have circle perfectly fit square, but we want some allowance for icons
+
+                self.view_label_info.clear()
             case "cloud"|"temperature"|"precipitation":
                 extent = self.calculate_extent([(entity['attributes']['longitude'], entity['attributes']['latitude']) for entity in filtered_people.values()], extent_dimension = 2.25)
                 map_bg = self.get_map_image(self.label_size, extent['extent'], extent['dimension'], extent['min_dimension'], 128, 1)
@@ -223,16 +231,31 @@ class HASSMap(HASSWidget):
                 ax.imshow(map_bg, extent = extent['extent'])
 
                 self.plt_add_met_office_view(ax, extent['extent'], type = self.view)
-            case "strava":
-                data = self.get_strava_map_data()
 
-                extent = self.calculate_extent([x for xs in data['data'].values() for x in xs])
+                self.view_label_info.clear()
+            case "strava":
+                data = self.get_strava_map_data(period = (datetime.datetime.today() - datetime.timedelta(days=30), datetime.datetime.now()))
+                data = self.kiosk_select_data(data, start_unselected=False)
+
+                if data["kiosk_selected"]:
+                    extent = self.calculate_extent(data['data'][data['kiosk_selected']]['polyline'])
+                else:
+                    coord_list = []
+                    for value in data['data'].values():
+                        coord_list = coord_list + [x for x in value['polyline']]
+                    extent = self.calculate_extent(coord_list)
+
                 map_bg = self.get_map_image(self.label_size, extent['extent'], extent['dimension'], extent['min_dimension'], 128, 1)
 
                 fig, ax = self.plt_make(extent)
                 ax.imshow(map_bg, extent = extent['extent'])
 
                 self.plt_add_strava_view(ax, data)
+
+                time_str = data['data'][data['kiosk_selected']]['start_date'].strftime('%A %d %b, %H:%M')
+                run_length = str(round(data['data'][data['kiosk_selected']]['distance']/1000,1)) + "k"
+
+                self.view_label_info.setText(f"{time_str}: {run_length}")
             case _:
                 raise KeyError(f"The view {self.view} was not found")
     
@@ -370,14 +393,14 @@ class HASSMap(HASSWidget):
                     data[body_id]["icon"] = plt.imread(theme.filestore['ui']['icons']['astro'][body_id])
         return {"data": data, "kiosk_selected": None}
 
-    def get_strava_map_data(self, type: str = None, period: tuple[datetime.datetime, datetime.datetime] = (datetime.datetime.today() - datetime.timedelta(days = 30), datetime.datetime.now())) -> dict:
-        client = get_strava_client()
-        activities = client.get_activities(after = period[0], before = period[1])
+    def get_strava_map_data(self, type: str = None, 
+                            period: tuple[datetime.datetime, datetime.datetime] = (datetime.datetime.today() - datetime.timedelta(days = 30), datetime.datetime.now()),
+                            cache_frequency: datetime.timedelta = datetime.timedelta(hours=1),
+                            cache_filepath: Path = Path("./data/strava_data_cache.json")) -> dict:
+        data = get_strava_data(period = period, cache_frequency = cache_frequency, cache_filepath=cache_filepath)
 
-        data = {"type": type, "data": {}}
-        for activity in activities:
-            detailed_activity = client.get_activity(activity.id)
-            data['data'][str(detailed_activity.id)] = [(x[1],x[0]) for x in polyline.polyline.decode(detailed_activity.map.polyline)] # need to flip to lon_lat
+        for key, value in data['data'].items():
+            data['data'][key]['start_date'] = datetime.datetime.fromtimestamp(value['start_date'])
 
         return data
 
@@ -535,21 +558,23 @@ class HASSMap(HASSWidget):
                     bbox = legend_bbox)
             
     def plt_add_strava_view(self, ax: plt.Axes, data: dict) -> None:
-        if len(data.values()) > 0:
-            # reset kiosk index if past final set
-            if self.kiosk_index >= (len(data.values()) + 1):
-                self.kiosk_index = 0
-
-            # mods for kiosk plotting
-            for idx, key in enumerate(data):
-                if idx == (self.kiosk_index - 1):
-                    poly = data['data'][key]
-                    ax.plot([x[0] for x in poly],
-                            [x[1] for x in poly],
-                            color = "#000",
-                            linewidth = 5,
-                            linestyle = 'solid',
-                            zorder = 1)
+        if len(data['data'].values()) > 0:
+            if not data['kiosk_selected']:
+                for value in data['data'].values():
+                        ax.plot([x[0] for x in value['polyline']],
+                                [x[1] for x in value['polyline']],
+                                color = "#000",
+                                linewidth = 5,
+                                linestyle = 'solid',
+                                zorder = 1)
+            else:
+                poly = data['data'][data['kiosk_selected']]['polyline']
+                ax.plot([x[0] for x in poly],
+                        [x[1] for x in poly],
+                        color = "#000",
+                        linewidth = 5,
+                        linestyle = 'solid',
+                        zorder = 1)
 
     # met office data is just images with some internal data (value meaning, ranges) so there's no getter for this
     def plt_add_met_office_view(self, ax: plt.Axes, extent: tuple[float, float, float, float], type: str = Literal["cloud", "precipitation", "temperature"]) -> None:
