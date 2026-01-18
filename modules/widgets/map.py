@@ -20,6 +20,7 @@ from scipy.spatial.distance import cdist
 from collections import defaultdict
 import networkx as nx
 import polyline
+import starplot
 
 from .widget_core import *
 from ..caching import *
@@ -51,15 +52,29 @@ class HASSMap(HASSWidget):
         """Qt Setup"""
 
         layout = QtWidgets.QVBoxLayout(self)
-        map_layout = QtWidgets.QVBoxLayout()
+        view_layout = QtWidgets.QHBoxLayout()
         button_layout = QtWidgets.QHBoxLayout()
-        layout.addLayout(map_layout)
+        layout.addLayout(view_layout)
         layout.addLayout(button_layout)
 
-        # Map image label
-        self.map_label = QtWidgets.QLabel(self)
-        self.map_label.setAlignment(QtCore.Qt.AlignCenter)
-        map_layout.addWidget(self.map_label)
+        # View label - Left
+        view_panel_left = QtWidgets.QVBoxLayout()
+        view_layout.addLayout(view_panel_left)
+
+        dummy_button = QtWidgets.QPushButton("dummy")
+        view_panel_left.addWidget(dummy_button)
+
+        # View label -Right
+        view_panel_right = QtWidgets.QVBoxLayout()
+        view_panel_right.setAlignment(QtCore.Qt.AlignRight)
+        view_layout.addLayout(view_panel_right)
+
+        self.view_label = QtWidgets.QLabel()
+        self.view_label.setAlignment(QtCore.Qt.AlignCenter)
+        view_panel_right.addWidget(self.view_label)
+        self.view_label_info = QtWidgets.QLabel()
+        self.view_label_info.setAlignment(QtCore.Qt.AlignCenter)
+        view_panel_right.addWidget(self.view_label_info)
 
         # Focus and view buttons
         self.focus_button = QtWidgets.QPushButton("Focus: All")
@@ -78,10 +93,6 @@ class HASSMap(HASSWidget):
         self.zones = {id: entity for id, entity in entities.items() if 'zone' in id}
         self.people = {id: entity for id, entity in entities.items() if 'person' in id}
         self.update_label()
-
-    def on_entity_update(self, entity):
-        # Update a single entity and redraw map if relevant
-        self.on_entities_update(self.entities)
     
     # hijacking show/hide to start/stop the kiosk timer
     def showEvent(self, event):
@@ -115,12 +126,13 @@ class HASSMap(HASSWidget):
 
     # Command invoked to toggle map view
     def toggle_view(self):
-        view_options = ["map", "astro", "cloud", "temperature", "precipitation", "strava"]
+        view_options = ["map", "astronomy", "bluh", "cloud", "temperature", "precipitation", "strava"]
         idx = view_options.index(self.view)
         self.view = view_options[(idx + 1) % len(view_options)]
         self.view_button.setText(f"View: {self.view.title()}")
 
-        if self.view == "astro":
+        # kiosk timer controls
+        if self.view in ["astronomy"]:
             self.kiosk_index = 0
             self.kiosk_timer.start()
         else:
@@ -130,26 +142,36 @@ class HASSMap(HASSWidget):
         self.update_label()
 
     def update_label(self):
-        self.label_size = int(min((self.width(), self.height())) * 0.875)
+        try:
+            self.label_size = int(min((self.window().width(), self.window().height())) * 0.8)
 
-        # main call to image generator
-        image = self.get_visuals()
+            # main call to image generator
+            image = self.get_visuals()
 
-        # generic image as a placeholder (when no data)
-        if not image:
-            placeholder_image = Image.open(theme.filestore['ui']['img']['globe'])
-            placeholder_image = placeholder_image.resize((self.label_size, self.label_size), resample= Image.Resampling.NEAREST)
-            placeholder_image = placeholder_image.convert('1')
-            image = placeholder_image
+            image = image.crop((1, 1, image.width - 1, image.height - 1))
+            image = ImageOps.expand(image, 1, fill = "#000000")
 
-        image = image.crop((1, 1, image.width - 1, image.height - 1))
-        image = ImageOps.expand(image, 1, fill = "#000000")
+            data = BytesIO()
+            image.save(data, format="PNG")
+            qimg = QImage.fromData(data.getvalue())
+            pixmap = QPixmap.fromImage(qimg)
+            self.view_label.setPixmap(pixmap)
+            self.view_label_info.clear() # TODO: move this set to each view match case for data
+        except Exception as e:
+            # generic image as a placeholder (when no data)
+            image = Image.open(theme.filestore['ui']['img']['bug'])
+            image = image.resize((self.label_size, self.label_size), resample= Image.Resampling.NEAREST)
+            image = image.convert('1')
+            
+            image = image.crop((1, 1, image.width - 1, image.height - 1))
+            image = ImageOps.expand(image, 1, fill = "#000000")
 
-        data = BytesIO()
-        image.save(data, format="PNG")
-        qimg = QImage.fromData(data.getvalue())
-        pixmap = QPixmap.fromImage(qimg)
-        self.map_label.setPixmap(pixmap)
+            data = BytesIO()
+            image.save(data, format="PNG")
+            qimg = QImage.fromData(data.getvalue())
+            pixmap = QPixmap.fromImage(qimg)
+            self.view_label.setPixmap(pixmap)
+            self.view_label_info.setText(str(e))
 
     """Getter Functions"""
     def get_visuals(self, **kwargs) -> Image.Image:
@@ -183,14 +205,15 @@ class HASSMap(HASSWidget):
                 data = self.get_people_movement_data()
                 label_store = self.plt_add_zones(ax, filtered_zones, -extent['buffer'], label_store)
                 label_store = self.plt_add_people(ax, filtered_people, data, extent['buffer'], label_store)
-            case "astro":
+            case "astronomy":
                 extent = self.calculate_extent([(entity['attributes']['longitude'], entity['attributes']['latitude']) for entity in filtered_people.values()])
                 map_bg = self.get_map_image(self.label_size, extent['extent'], extent['dimension'], extent['min_dimension'], 128, 1)
 
                 fig, ax = self.plt_make(extent)
                 ax.imshow(map_bg, extent = extent['extent'])
 
-                data = self.get_astronomy_map_data(extent['centre'], extent['extent'], (extent['dimension']/2) + (extent['buffer']/2))
+                data = self.get_astronomy_map_data(token_config["astronomy_lon_lat"], extent['extent'], (extent['dimension']/2) + (extent['buffer']/2))
+                data = self.kiosk_select_data(data)
                 self.plt_add_astronomy(data, ax, extent['centre'], extent['extent'], (extent['dimension']/2) + (extent['buffer']/2)) # +map buffer would have circle perfectly fit square, but we want some allowance for icons
             case "cloud"|"temperature"|"precipitation":
                 extent = self.calculate_extent([(entity['attributes']['longitude'], entity['attributes']['latitude']) for entity in filtered_people.values()], extent_dimension = 2.25)
@@ -210,6 +233,8 @@ class HASSMap(HASSWidget):
                 ax.imshow(map_bg, extent = extent['extent'])
 
                 self.plt_add_strava_view(ax, data)
+            case _:
+                raise KeyError(f"The view {self.view} was not found")
     
         # TODO: bundle into plt_add_zones/people? would remove need for plt functions to ingest & spit out label_store, too
         adjust_text(label_store, arrowprops=dict(arrowstyle = '-', color = "#000000", linewidth = 3, zorder = 2))
@@ -225,6 +250,7 @@ class HASSMap(HASSWidget):
 
         return image
 
+    # TODO: feed ax into here to imshow in function
     def get_map_image(self, size: int, extent: list, aspect: float, min_aspect: float, brightness: float, contrast: float) -> Image.Image:
         match math.floor(math.log2(aspect / min_aspect)):
             case 0: _zoom_level = 17
@@ -342,11 +368,11 @@ class HASSMap(HASSWidget):
                         data[body_id]["icon"] = plt.imread(theme.filestore['ui']['icons']['astro']["moon_bug"])
                 case _:
                     data[body_id]["icon"] = plt.imread(theme.filestore['ui']['icons']['astro'][body_id])
-        return data
+        return {"data": data, "kiosk_selected": None}
 
-    def get_strava_map_data(self, type: str = None) -> dict:
+    def get_strava_map_data(self, type: str = None, period: tuple[datetime.datetime, datetime.datetime] = (datetime.datetime.today() - datetime.timedelta(days = 30), datetime.datetime.now())) -> dict:
         client = get_strava_client()
-        activities = client.get_activities(after = (datetime.datetime.today() - datetime.timedelta(days = 1)))
+        activities = client.get_activities(after = period[0], before = period[1])
 
         data = {"type": type, "data": {}}
         for activity in activities:
@@ -356,11 +382,12 @@ class HASSMap(HASSWidget):
         return data
 
     """Plotter Functions"""
-    def plt_make(self, extent: dict):
+    def plt_make(self, extent: dict = None):
         fig, ax = plt.subplots(figsize = (8,8))
         plt.axis('off')
-        ax.set_xlim(extent['extent'][0], extent['extent'][1])
-        ax.set_ylim(extent['extent'][2], extent['extent'][3])
+        if extent:
+            ax.set_xlim(extent['extent'][0], extent['extent'][1])
+            ax.set_ylim(extent['extent'][2], extent['extent'][3])
         return fig, ax
 
     def plt_add_zones(self, ax: plt.Axes, zones: dict, label_offset: float, label_store: list) -> list:
@@ -431,15 +458,7 @@ class HASSMap(HASSWidget):
         return label_store
     
     def plt_add_astronomy(self, data: dict, ax: plt.Axes, lon_lat: tuple, extent: list, max_radius: float) -> None:
-        if len(data) > 0:
-            # reset kiosk index if past final set
-            if self.kiosk_index >= (len(data) + 1):
-                self.kiosk_index = 0
-
-            # mods for kiosk plotting
-            for idx, key in enumerate(data):
-                data[key]["kiosk_selected"] = (idx == (self.kiosk_index - 1))
-            
+        if len(data) > 0: 
             # plot crosshair
             ax.axvline(x = lon_lat[0], color = "#000000")
             ax.axhline(y = lon_lat[1], color = "#000000")
@@ -449,16 +468,16 @@ class HASSMap(HASSWidget):
 
             # index-wise plotting due to kiosk
             astro_markers = []
-            for idx, key in enumerate(data):
-                conversion = self.alt_az_to_viewport(data[key]['position'], lon_lat, extent, max_radius)
+            for key, value in data['data'].items():
+                conversion = self.alt_az_to_viewport(value['position'], lon_lat, extent, max_radius)
 
-                if self.kiosk_index == 0:
+                if not data["kiosk_selected"]:
                     is_focus = False
                     zoom_level = 0.2
                     focused_str = "   "
                     line_color = "#666666"
                     line_width = 2
-                elif self.kiosk_index == (idx + 1):
+                elif key == data["kiosk_selected"]:
                     is_focus = True
                     zoom_level = 0.35
                     focused_str = "<<<"
@@ -471,12 +490,12 @@ class HASSMap(HASSWidget):
                     line_color = "#999999"
                     line_width = 1
 
-                ax.plot(*zip(*data[key]['history']),
+                ax.plot(*zip(*value['history']),
                     color = line_color,
                     linewidth = line_width,
                     zorder = 1)
 
-                astro_icon_image = OffsetImage(data[key]['icon'], zoom = zoom_level, interpolation = 'bicubic')
+                astro_icon_image = OffsetImage(value['icon'], zoom = zoom_level, interpolation = 'bicubic')
                 astro_marker = AnnotationBbox(astro_icon_image, conversion, frameon = False, annotation_clip = True)
                 astro_marker.set_clip_on(True)
 
@@ -487,7 +506,7 @@ class HASSMap(HASSWidget):
                     astro_markers.insert(0, astro_marker) # push to front, render... not last.
 
                 if len(legend_text) > 0: legend_text = legend_text + "\n" # separate lines
-                legend_text = f"{legend_text}{data[key]['name']}: {round((180/math.pi)*data[key]['position'][0],1)},{round((180/math.pi)*data[key]['position'][1],1)}{focused_str}"
+                legend_text = f"{legend_text}{value['name']}: {round((180/math.pi)  *value['position'][0],1)},{round((180/math.pi) * value['position'][1],1)}{focused_str}"
 
             # render marker list
             for astro_marker in astro_markers:
@@ -516,13 +535,21 @@ class HASSMap(HASSWidget):
                     bbox = legend_bbox)
             
     def plt_add_strava_view(self, ax: plt.Axes, data: dict) -> None:
-        for poly in data['data'].values():
-            ax.plot([x[0] for x in poly],
-                    [x[1] for x in poly],
-                    color = "#000",
-                    linewidth = 5,
-                    linestyle = 'solid',
-                    zorder = 1)
+        if len(data.values()) > 0:
+            # reset kiosk index if past final set
+            if self.kiosk_index >= (len(data.values()) + 1):
+                self.kiosk_index = 0
+
+            # mods for kiosk plotting
+            for idx, key in enumerate(data):
+                if idx == (self.kiosk_index - 1):
+                    poly = data['data'][key]
+                    ax.plot([x[0] for x in poly],
+                            [x[1] for x in poly],
+                            color = "#000",
+                            linewidth = 5,
+                            linestyle = 'solid',
+                            zorder = 1)
 
     # met office data is just images with some internal data (value meaning, ranges) so there's no getter for this
     def plt_add_met_office_view(self, ax: plt.Axes, extent: tuple[float, float, float, float], type: str = Literal["cloud", "precipitation", "temperature"]) -> None:
@@ -619,6 +646,22 @@ class HASSMap(HASSWidget):
                     bbox = legend_bbox)
 
     """Tool Functions (for getter/plotter)"""
+    def kiosk_select_data(self, data: dict, start_unselected: bool = True) -> dict:
+        if len(data['data']) > 0:
+            # reset kiosk index if past final set
+            match start_unselected:
+                case True: kiosk_start_point = 1
+                case False: kiosk_start_point = 0
+
+            self.kiosk_index = self.kiosk_index % (len(data['data']) + kiosk_start_point)
+
+            if start_unselected and self.kiosk_index == 0:
+                data["kiosk_selected"] = None
+            else:
+                data["kiosk_selected"] = list(data['data'].keys())[self.kiosk_index - kiosk_start_point]
+        
+        return data
+
     def calculate_extent(self, lon_lat: list[tuple[float,float]], buffer_amount: float = 0.1, extent_dimension: float = None, min_dimension: float = 0.0015) -> dict:
         lon_values = [x[0] for x in lon_lat]
         lat_values = [x[1] for x in lon_lat]
@@ -699,3 +742,45 @@ class HASSMap(HASSWidget):
 
         output_label_list = [x for idx, x in enumerate(label_list) if idx not in labels_to_remove]
         return output_label_list + new_labels
+    
+    # deprecated
+    """
+    def plt_sky_view(self, ax: plt.Axes, lon_lat: tuple[float, float]) -> None:
+    # reset kiosk index if past final set
+    if self.kiosk_index > 3:
+        self.kiosk_index = 0
+    
+    dir = self.kiosk_index * 90
+
+    style = starplot.PlotStyle(
+        constellation_labels = starplot.LabelStyle(font_size=32, font_weight=starplot.FontWeightEnum.NORMAL, zorder=starplot.ZOrderEnum.LAYER_3),
+        constellation_lines = starplot.LineStyle(color="#444444", width = 8, zorder=starplot.ZOrderEnum.LAYER_3),
+        star = starplot.ObjectStyle(marker=starplot.MarkerStyle(fill=starplot.FillStyleEnum.FULL, zorder=starplot.ZOrderEnum.LAYER_3, size=40, edge_color=None))
+    )
+    observer = starplot.Observer(dt = datetime.datetime.now(tz = datetime.timezone.utc),
+                                    lon = lon_lat[0],
+                                    lat = lon_lat[1]) 
+    plot = starplot.HorizonPlot(altitude = (0,90),
+                                azimuth = (dir-45,dir+45),
+                                observer=observer,
+                                style=style,
+                                show_compass=False,
+                                show_grid=False,
+                                show_axes=False,
+                                show_labels=False,
+                                padding=0,
+                                margin=0,
+                                resolution = 256,
+                                autoscale=True)
+
+    plot.constellations()
+    plot.stars(where=[starplot._.magnitude < 5],
+                where_labels=[False])
+    plot.constellation_labels()
+    
+    buffer = BytesIO()
+    plot.fig.savefig(buffer, format="png", dpi=plot.fig.dpi, bbox_inches="tight", pad_inches=0)
+    buffer.seek(0) 
+    image = Image.open(buffer)
+    ax.imshow(image)
+    """

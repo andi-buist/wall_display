@@ -8,7 +8,6 @@ def dir_to_dict(dir: Path):
         parts = path.relative_to(dir).parts
         place = out_dict
 
-        # Walk all parts except the last
         for part in parts[:-1]:
             place = place.setdefault(part, {})
         last = parts[-1]
