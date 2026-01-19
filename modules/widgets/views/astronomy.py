@@ -36,6 +36,8 @@ class AstronomyView(View):
         self.focus_button = QtWidgets.QPushButton("Focus: All")
         self.focus_button.clicked.connect(self.toggle_focus)
         layout.addWidget(self.focus_button)
+
+        QtCore.QTimer.singleShot(0, self.update_view)
     
     def _on_entities_updated(self, entities):
         # Update zones and people lists, then redraw map
@@ -67,7 +69,6 @@ class AstronomyView(View):
             "extent": extent,
             "data": self.kiosk_select_data(astro)
         }
-
 
     def update_view(self):
         self.label_size = int(min(self.view_label.width(), self.view_label.height()))

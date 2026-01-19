@@ -24,6 +24,9 @@ class Viewer(HASSWidget):
         self.view_options = view_options
         self.infobox_options = infobox_options
 
+        self.view = None
+        self.infobox = None
+
         self.view_choice = list(view_options.keys())[0]
 
         # Qt Setup:
@@ -106,8 +109,9 @@ class Viewer(HASSWidget):
         while (item := self.view_panel_left_layout.takeAt(0)) is not None:
             if item.widget():
                 item.widget().deleteLater()
-
-        self.view_panel_left_layout.addWidget(self.infobox)
+        
+        if self.infobox:
+            self.view_panel_left_layout.addWidget(self.infobox)
 
     def build_right_panel(self):
         # clear existing

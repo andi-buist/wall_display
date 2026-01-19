@@ -23,6 +23,8 @@ class StravaView(View):
         self.view_label_info = QtWidgets.QLabel()
         self.view_label_info.setAlignment(QtCore.Qt.AlignCenter)
         layout.addWidget(self.view_label_info)
+
+        QtCore.QTimer.singleShot(0, self.update_view)
     
     def _on_entities_updated(self, entities):
         self.update_view()

@@ -30,6 +30,8 @@ class View(HASSWidget):
         self.kiosk_timer.timeout.connect(self.on_kiosk_timer_next)
         self.kiosk_timer.start()
 
+        QtCore.QTimer.singleShot(0, self.update_view)
+
     # when kiosk timer triggers, tick index up, update map
     def on_kiosk_timer_next(self):
         self.kiosk_index += 1
