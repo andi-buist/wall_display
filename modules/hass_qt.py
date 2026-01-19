@@ -1,9 +1,15 @@
 from PySide6 import QtCore, QtWidgets
 from websocket import *
+from functools import partial
 
 from modules.websocket_defs import *
 from modules.widgets.buttons import *
-from modules.widgets.map import *
+from modules.widgets.viewer import *
+from modules.widgets.views.astronomy import *
+from modules.widgets.views.map import *
+from modules.widgets.views.weather import *
+from modules.widgets.views.strava import *
+from modules.widgets.infoboxes.strava import *
 from modules.widgets.rgb_spinner import *
 from modules.widgets.terminal import *
 import theme
@@ -44,7 +50,19 @@ class HASSApp(QtWidgets.QApplication):
             {'label': "Spinner",
              'widget': ChannelSpinner(self.data_manager, font_scale=3)},
             {'label': "Map",
-             'widget': HASSMap(self.data_manager)},
+             'widget': Viewer(self.data_manager,
+                              view_options = {
+                                  "map": lambda: MapView(self.data_manager),
+                                  "astronomy": lambda: AstronomyView(self.data_manager),
+                                  "weather: precipitation": lambda: WeatherView(self.data_manager, 'precipitation'),
+                                  "weather: temperature": lambda: WeatherView(self.data_manager, 'temperature'),
+                                  "weather: cloud": lambda: WeatherView(self.data_manager, 'cloud'),
+                                  "strava": lambda: StravaView(self.data_manager)
+                                  },
+                                  infobox_options = {
+                                      "strava": lambda runtime_data: StravaInfoBox(runtime_data)
+                                  }
+                                  )},
             {'label': "Terminal",
              'widget': Terminal()}
                          ]
