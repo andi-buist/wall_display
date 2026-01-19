@@ -1,9 +1,8 @@
-from PySide6 import QtWidgets
-from PySide6.QtGui import QPixmap, QImage
+from PySide6 import QtWidgets, QtGui
 
 from io import BytesIO
 import dateutil
-from PIL import Image, ImageEnhance, ImageOps
+from PIL import Image, ImageEnhance, ImageOps, ImageQt
 import matplotlib
 import matplotlib.pyplot as plt
 import matplotlib.patches as patches
@@ -19,8 +18,6 @@ import numpy as np
 from scipy.spatial.distance import cdist
 from collections import defaultdict
 import networkx as nx
-import polyline
-import starplot
 
 from .widget_core import *
 from ..caching import *
@@ -50,33 +47,45 @@ class HASSMap(HASSWidget):
         self.kiosk_timer.timeout.connect(self.on_kiosk_timer_next)
 
         """Qt Setup"""
-
         layout = QtWidgets.QVBoxLayout(self)
         view_layout = QtWidgets.QHBoxLayout()
-        button_layout = QtWidgets.QHBoxLayout()
         layout.addLayout(view_layout)
+        button_layout = QtWidgets.QHBoxLayout()
         layout.addLayout(button_layout)
 
-        # View label - Left
-        view_panel_left = QtWidgets.QVBoxLayout()
-        view_layout.addLayout(view_panel_left)
+        # left panel
+        self.view_panel_left = QtWidgets.QVBoxLayout()
+        self.view_panel_left.setAlignment(QtCore.Qt.AlignCenter)
 
-        dummy_button = QtWidgets.QPushButton("dummy")
-        view_panel_left.addWidget(dummy_button)
+        self.left_widget = QtWidgets.QWidget()
+        self.left_widget.setLayout(self.view_panel_left)
+        self.left_widget.setSizePolicy(QtWidgets.QSizePolicy.Policy.Minimum, QtWidgets.QSizePolicy.Policy.Expanding)
 
-        # View label -Right
+        # right panel (viewer)
         view_panel_right = QtWidgets.QVBoxLayout()
-        view_panel_right.setAlignment(QtCore.Qt.AlignRight)
-        view_layout.addLayout(view_panel_right)
+        view_panel_right.setAlignment(QtCore.Qt.AlignCenter)
 
+        self.right_widget = QtWidgets.QWidget()
+        self.right_widget.setLayout(view_panel_right)
+        self.right_widget.setSizePolicy(QtWidgets.QSizePolicy.Policy.Expanding, QtWidgets.QSizePolicy.Policy.Expanding)
+
+        view_layout.addWidget(self.left_widget)
+        view_layout.addWidget(self.right_widget)
+        view_layout.setStretchFactor(self.left_widget, 0)
+        view_layout.setStretchFactor(self.right_widget, 1)
+
+        # view label
         self.view_label = QtWidgets.QLabel()
         self.view_label.setAlignment(QtCore.Qt.AlignCenter)
+        self.view_label.setSizePolicy(QtWidgets.QSizePolicy.Policy.Expanding, QtWidgets.QSizePolicy.Policy.Expanding)
         view_panel_right.addWidget(self.view_label)
+
+        # label below viewer (text etc)
         self.view_label_info = QtWidgets.QLabel()
         self.view_label_info.setAlignment(QtCore.Qt.AlignCenter)
         view_panel_right.addWidget(self.view_label_info)
 
-        # Focus and view buttons
+        # buttons
         self.focus_button = QtWidgets.QPushButton("Focus: All")
         self.focus_button.clicked.connect(self.toggle_focus)
         button_layout.addWidget(self.focus_button)
@@ -85,20 +94,18 @@ class HASSMap(HASSWidget):
         self.view_button.clicked.connect(self.toggle_view)
         button_layout.addWidget(self.view_button)
 
-        # Initial map render
-        self.update_label()
-
     def on_entities_update(self, entities):
         # Update zones and people lists, then redraw map
         self.zones = {id: entity for id, entity in entities.items() if 'zone' in id}
         self.people = {id: entity for id, entity in entities.items() if 'person' in id}
-        self.update_label()
+        self.update_view()
     
     # hijacking show/hide to start/stop the kiosk timer
     def showEvent(self, event):
         self.kiosk_index = 0
         self.kiosk_timer.start()
         super().showEvent(event)
+        QtCore.QTimer.singleShot(0, self.update_view)
     
     def hideEvent(self, event):
         self.kiosk_index = 0
@@ -108,7 +115,7 @@ class HASSMap(HASSWidget):
     # when kiosk timer triggers, tick index up, update map
     def on_kiosk_timer_next(self):
         self.kiosk_index += 1
-        self.update_label()
+        self.update_view()
 
     # Command invoked to toggle map focus (person)
     def toggle_focus(self):
@@ -122,7 +129,7 @@ class HASSMap(HASSWidget):
             self.focus_button.setText(f"Focus: {self.people[self.map_focus]['attributes']['friendly_name']}")
         else:
             self.focus_button.setText(f"Focus: {self.map_focus.title()}")
-        self.update_label()
+        self.update_view()
 
     # Command invoked to toggle map view
     def toggle_view(self):
@@ -141,23 +148,26 @@ class HASSMap(HASSWidget):
                 self.kiosk_index = 0
                 self.kiosk_timer.stop()
 
-        self.update_label()
+        self.update_view()
 
-    def update_label(self):
-        try:
-            self.label_size = int(min((self.window().width(), self.window().height())) * 0.8)
+    def update_view(self):
+        # main call to image generator
+        view_data = self.get_view_data()
+        self.build_left_panel(view_data)
+        QtCore.QTimer.singleShot(0, lambda: self._deferred_render_visuals(view_data))
 
-            # main call to image generator
-            image = self.get_visuals()
-
+    # render visuals, even if coded after self.build_left_panel, can occur before. using a deferred function, we can assure the first layout is done
+    def _deferred_render_visuals(self, view_data: dict):
+        try: 
+            image = self.render_visuals(view_data)
             if image:
                 image = image.crop((1, 1, image.width - 1, image.height - 1))
                 image = ImageOps.expand(image, 1, fill = "#000000")
 
                 data = BytesIO()
                 image.save(data, format="PNG")
-                qimg = QImage.fromData(data.getvalue())
-                pixmap = QPixmap.fromImage(qimg)
+                qimg = QtGui.QImage.fromData(data.getvalue())
+                pixmap = QtGui.QPixmap.fromImage(qimg)
                 self.view_label.setPixmap(pixmap)
             else:
                 self.view_label.setText("Loading...")
@@ -167,111 +177,92 @@ class HASSMap(HASSWidget):
             image = image.resize((self.label_size, self.label_size), resample= Image.Resampling.NEAREST)
             image = image.convert('1')
             
+            # add 1px border in image
             image = image.crop((1, 1, image.width - 1, image.height - 1))
             image = ImageOps.expand(image, 1, fill = "#000000")
 
             data = BytesIO()
             image.save(data, format="PNG")
-            qimg = QImage.fromData(data.getvalue())
-            pixmap = QPixmap.fromImage(qimg)
+            qimg = QtGui.QImage.fromData(data.getvalue())
+            pixmap = QtGui.QPixmap.fromImage(qimg)
             self.view_label.setPixmap(pixmap)
             self.view_label_info.setText(str(e))
 
+    def build_left_panel(self, view_data):
+        # clear existing
+        while (item := self.view_panel_left.takeAt(0)) is not None:
+            if item.widget():
+                item.widget().deleteLater()
+
+        match self.view:
+            case "strava":
+                data = view_data['data']
+                kiosk_data = data['data'][data['kiosk_selected']]
+
+                achievement_list = AchievementList()
+
+                for achievement in kiosk_data['achievements'].values():
+                    for a in achievement['achievements']:
+                        achievement_list.add_achievement(achievement['name'], a['rank'])
+
+                self.view_panel_left.addWidget(achievement_list)
+
     """Getter Functions"""
-    def get_visuals(self, **kwargs) -> Image.Image:
-        if len(self.zones) == 0 and len(self.people) == 0:
-            return None
-        
-        # copy self.zones/people to filter to needed
-        filtered_zones = self.zones
+    def get_view_data(self):
         filtered_people = self.people
+        filtered_zones = self.zones
 
-        # if focus is a person, filter people to that person
-        if self.map_focus in self.entities.keys():
-           filtered_people = {entity_id: entity for entity_id, entity in filtered_people.items() if  self.map_focus in entity_id}
+        if self.map_focus in self.entities:
+            filtered_people = {eid: ent for eid, ent in filtered_people.items() if self.map_focus in eid}
 
-        # map plot setup ----
-        plt.rcParams['font.family'] = "Nintendo DS BIOS"
-
-        label_store = []
-        
-        """Match case for the current display mode"""
         match self.view:
             case "map":
-                extent = self.calculate_extent([(entity['attributes']['longitude'], entity['attributes']['latitude']) for entity in filtered_people.values()])
-                map_bg = self.get_map_image(self.label_size, extent['extent'], extent['dimension'], extent['min_dimension'], 128, 1)
-
-                filtered_zones = self.filter_entities_to_extent(filtered_zones, extent['extent']) # remove zones out of view
-
-                fig, ax = self.plt_make(extent)
-                ax.imshow(map_bg, extent = extent['extent'])
-
+                extent = self.calculate_extent([(p['attributes']['longitude'], p['attributes']['latitude']) for p in filtered_people.values()])
                 data = self.get_people_movement_data()
-                label_store = self.plt_add_zones(ax, filtered_zones, -extent['buffer'], label_store)
-                label_store = self.plt_add_people(ax, filtered_people, data, extent['buffer'], label_store)
+                return {
+                    "extent": extent,
+                    "filtered_people": filtered_people,
+                    "filtered_zones": filtered_zones,
+                    "data": data
+                }
 
-                self.view_label_info.clear()
             case "astronomy":
-                extent = self.calculate_extent([(entity['attributes']['longitude'], entity['attributes']['latitude']) for entity in filtered_people.values()])
-                map_bg = self.get_map_image(self.label_size, extent['extent'], extent['dimension'], extent['min_dimension'], 128, 1)
+                extent = self.calculate_extent([(p['attributes']['longitude'], p['attributes']['latitude']) for p in filtered_people.values()])
+                astro = self.get_astronomy_map_data(
+                    token_config["astronomy_lon_lat"],
+                    extent['extent'],
+                    (extent['dimension']/2) + (extent['buffer']/2)
+                )
+                return {
+                    "extent": extent,
+                    "data": self.kiosk_select_data(astro)
+                }
 
-                fig, ax = self.plt_make(extent)
-                ax.imshow(map_bg, extent = extent['extent'])
+            case "cloud" | "temperature" | "precipitation":
+                extent = self.calculate_extent([(p['attributes']['longitude'], p['attributes']['latitude']) for p in filtered_people.values()], extent_dimension = 2.25)
+                return {"extent": extent}
 
-                data = self.get_astronomy_map_data(token_config["astronomy_lon_lat"], extent['extent'], (extent['dimension']/2) + (extent['buffer']/2))
-                data = self.kiosk_select_data(data)
-                self.plt_add_astronomy(data, ax, extent['centre'], extent['extent'], (extent['dimension']/2) + (extent['buffer']/2)) # +map buffer would have circle perfectly fit square, but we want some allowance for icons
-
-                self.view_label_info.clear()
-            case "cloud"|"temperature"|"precipitation":
-                extent = self.calculate_extent([(entity['attributes']['longitude'], entity['attributes']['latitude']) for entity in filtered_people.values()], extent_dimension = 2.25)
-                map_bg = self.get_map_image(self.label_size, extent['extent'], extent['dimension'], extent['min_dimension'], 128, 1)
-
-                fig, ax = self.plt_make(extent)
-                ax.imshow(map_bg, extent = extent['extent'])
-
-                self.plt_add_met_office_view(ax, extent['extent'], type = self.view)
-
-                self.view_label_info.clear()
             case "strava":
                 data = self.get_strava_map_data(period = (datetime.datetime.today() - datetime.timedelta(days=30), datetime.datetime.now()))
                 data = self.kiosk_select_data(data, start_unselected=False)
+                kiosk_data = data['data'][data['kiosk_selected']]
 
+                # compute extent
                 if data["kiosk_selected"]:
-                    extent = self.calculate_extent(data['data'][data['kiosk_selected']]['polyline'])
+                    extent = self.calculate_extent(kiosk_data['polyline'])
                 else:
-                    coord_list = []
-                    for value in data['data'].values():
-                        coord_list = coord_list + [x for x in value['polyline']]
-                    extent = self.calculate_extent(coord_list)
+                    coords = []
+                    for v in data['data'].values():
+                        coords.extend(v['polyline'])
+                    extent = self.calculate_extent(coords)
 
-                map_bg = self.get_map_image(self.label_size, extent['extent'], extent['dimension'], extent['min_dimension'], 128, 1)
+                return {
+                    "extent": extent,
+                    "data": data
+                }
 
-                fig, ax = self.plt_make(extent)
-                ax.imshow(map_bg, extent = extent['extent'])
-
-                self.plt_add_strava_view(ax, data)
-
-                time_str = data['data'][data['kiosk_selected']]['start_date'].strftime('%A %d %b, %H:%M')
-                run_length = str(round(data['data'][data['kiosk_selected']]['distance']/1000,1)) + "k"
-
-                self.view_label_info.setText(f"{time_str}: {run_length}")
             case _:
-                raise KeyError(f"The view {self.view} was not found")
-    
-        # TODO: bundle into plt_add_zones/people? would remove need for plt functions to ingest & spit out label_store, too
-        adjust_text(label_store, arrowprops=dict(arrowstyle = '-', color = "#000000", linewidth = 3, zorder = 2))
-        """---End of second plot cycle---"""
-
-        image_buffer = BytesIO()
-        fig.savefig(image_buffer, format = 'png', bbox_inches='tight', pad_inches = 0)
-        plt.close()
-
-        image = Image.open(image_buffer)
-        image = image.resize((self.label_size, self.label_size), resample= Image.Resampling.NEAREST)
-        image = image.convert('1')
-
-        return image
+                raise KeyError(f"Unknown view {self.view}")
 
     # TODO: feed ax into here to imshow in function
     def get_map_image(self, size: int, extent: list, aspect: float, min_aspect: float, brightness: float, contrast: float) -> Image.Image:
@@ -405,6 +396,91 @@ class HASSMap(HASSWidget):
         return data
 
     """Plotter Functions"""
+    def render_visuals(self, view_data: dict) -> Image.Image:
+        # map plot setup ----
+        plt.rcParams['font.family'] = "Nintendo DS BIOS"
+        label_store = []
+
+        self.label_size = int(min(self.view_label.width(), self.view_label.height()))
+
+        match self.view:
+            case "map":
+                if len(self.zones) == 0 and len(self.people) == 0:
+                    return None
+                extent = view_data['extent']
+                data = view_data['data']
+
+                map_bg = self.get_map_image(self.label_size, extent['extent'], extent['dimension'], extent['min_dimension'], 128, 1)
+
+                fig, ax = self.plt_make(extent)
+                ax.imshow(map_bg, extent = extent['extent'])
+
+                label_store = self.plt_add_zones(ax, view_data['filtered_zones'], -extent['buffer'], label_store)
+                label_store = self.plt_add_people(ax, view_data['filtered_people'], data, extent['buffer'], label_store)
+
+                self.view_label_info.clear()
+            case "astronomy":
+                extent = view_data['extent']
+                data = view_data['data']
+
+                map_bg = self.get_map_image(self.label_size, extent['extent'], extent['dimension'], extent['min_dimension'], 128, 1)
+
+                fig, ax = self.plt_make(extent)
+                ax.imshow(map_bg, extent = extent['extent'])
+
+                self.plt_add_astronomy(data, ax, extent['centre'], extent['extent'], (extent['dimension']/2) + (extent['buffer']/2)) # +map buffer would have circle perfectly fit square, but we want some allowance for icons
+
+                self.view_label_info.clear()
+            case "cloud"|"temperature"|"precipitation":
+                extent = view_data['extent']
+                map_bg = self.get_map_image(self.label_size, extent['extent'], extent['dimension'], extent['min_dimension'], 128, 1)
+
+                fig, ax = self.plt_make(extent)
+                ax.imshow(map_bg, extent = extent['extent'])
+
+                self.plt_add_met_office_view(ax, extent['extent'], type = self.view)
+
+                self.view_label_info.clear()
+            case "strava":
+                data = view_data['data']
+                kiosk_data = data['data'][data['kiosk_selected']]
+
+                if data["kiosk_selected"]:
+                    extent = self.calculate_extent(kiosk_data['polyline'])
+                else:
+                    coord_list = []
+                    for value in data['data'].values():
+                        coord_list = coord_list + [x for x in value['polyline']]
+                    extent = self.calculate_extent(coord_list)
+
+                map_bg = self.get_map_image(self.label_size, extent['extent'], extent['dimension'], extent['min_dimension'], 128, 1)
+
+                fig, ax = self.plt_make(extent)
+                ax.imshow(map_bg, extent = extent['extent'])
+
+                self.plt_add_strava_view(ax, data)
+
+                time_str = kiosk_data['start_date'].strftime('%A %d %b, %H:%M')
+                run_length = str(round(kiosk_data['distance']/1000,1)) + "k"
+
+                self.view_label_info.setText(f"{time_str}: {run_length}")
+            case _:
+                raise KeyError(f"The view {self.view} was not found")
+    
+        # TODO: bundle into plt_add_zones/people? would remove need for plt functions to ingest & spit out label_store, too
+        adjust_text(label_store, arrowprops=dict(arrowstyle = '-', color = "#000000", linewidth = 3, zorder = 2))
+        """---End of second plot cycle---"""
+
+        image_buffer = BytesIO()
+        fig.savefig(image_buffer, format = 'png', bbox_inches='tight', pad_inches = 0)
+        plt.close()
+
+        image = Image.open(image_buffer)
+        image = image.resize((self.label_size, self.label_size), resample= Image.Resampling.NEAREST)
+        image = image.convert('1')
+
+        return image
+
     def plt_make(self, extent: dict = None):
         fig, ax = plt.subplots(figsize = (8,8))
         plt.axis('off')
@@ -767,45 +843,29 @@ class HASSMap(HASSWidget):
 
         output_label_list = [x for idx, x in enumerate(label_list) if idx not in labels_to_remove]
         return output_label_list + new_labels
-    
-    # deprecated
-    """
-    def plt_sky_view(self, ax: plt.Axes, lon_lat: tuple[float, float]) -> None:
-    # reset kiosk index if past final set
-    if self.kiosk_index > 3:
-        self.kiosk_index = 0
-    
-    dir = self.kiosk_index * 90
+class AchievementList(QtWidgets.QWidget): 
+    def __init__(self): 
+        super().__init__() 
+        self.vbox = QtWidgets.QVBoxLayout(self)
 
-    style = starplot.PlotStyle(
-        constellation_labels = starplot.LabelStyle(font_size=32, font_weight=starplot.FontWeightEnum.NORMAL, zorder=starplot.ZOrderEnum.LAYER_3),
-        constellation_lines = starplot.LineStyle(color="#444444", width = 8, zorder=starplot.ZOrderEnum.LAYER_3),
-        star = starplot.ObjectStyle(marker=starplot.MarkerStyle(fill=starplot.FillStyleEnum.FULL, zorder=starplot.ZOrderEnum.LAYER_3, size=40, edge_color=None))
-    )
-    observer = starplot.Observer(dt = datetime.datetime.now(tz = datetime.timezone.utc),
-                                    lon = lon_lat[0],
-                                    lat = lon_lat[1]) 
-    plot = starplot.HorizonPlot(altitude = (0,90),
-                                azimuth = (dir-45,dir+45),
-                                observer=observer,
-                                style=style,
-                                show_compass=False,
-                                show_grid=False,
-                                show_axes=False,
-                                show_labels=False,
-                                padding=0,
-                                margin=0,
-                                resolution = 256,
-                                autoscale=True)
+    def add_achievement(self, text: str = None, rank: Literal[1,2,3] = 1):
+        match rank:
+            case 1:
+                icon_path: Path = theme.filestore['ui']['icons']['misc']['medal_1']
+            case 2:
+                icon_path: Path = theme.filestore['ui']['icons']['misc']['medal_2']
+            case 3:
+                icon_path: Path = theme.filestore['ui']['icons']['misc']['medal_3']
 
-    plot.constellations()
-    plot.stars(where=[starplot._.magnitude < 5],
-                where_labels=[False])
-    plot.constellation_labels()
-    
-    buffer = BytesIO()
-    plot.fig.savefig(buffer, format="png", dpi=plot.fig.dpi, bbox_inches="tight", pad_inches=0)
-    buffer.seek(0) 
-    image = Image.open(buffer)
-    ax.imshow(image)
-    """
+        hbox = QtWidgets.QHBoxLayout()
+        hbox.setAlignment(QtCore.Qt.AlignmentFlag.AlignLeft)
+
+        icon = QtWidgets.QLabel(pixmap = QtGui.QPixmap.fromImage(ImageQt.ImageQt(icon_path)))
+        icon.setSizePolicy(QtWidgets.QSizePolicy.Policy.Minimum, QtWidgets.QSizePolicy.Policy.Minimum)
+        label = QtWidgets.QLabel(text)
+        label.setSizePolicy(QtWidgets.QSizePolicy.Policy.Expanding, QtWidgets.QSizePolicy.Policy.Minimum)
+        label.setAlignment(QtCore.Qt.AlignmentFlag.AlignLeft | QtCore.Qt.AlignmentFlag.AlignVCenter)
+
+        hbox.addWidget(icon) 
+        hbox.addWidget(label)
+        self.vbox.addLayout(hbox)

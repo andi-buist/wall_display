@@ -153,6 +153,14 @@ def get_strava_data(period: tuple[datetime.datetime, datetime.datetime] = (datet
             activity_dict["polyline"] = [(x[1],x[0]) for x in polyline.polyline.decode(detailed_activity.map.polyline)] # need to flip to lon_lat
             activity_dict["start_point"] = tuple(reversed(detailed_activity.start_latlng.root))
             activity_dict["end_point"] = tuple(reversed(detailed_activity.end_latlng.root))
+            activity_dict["calories"] = detailed_activity.calories
+            activity_dict["achievements"] = {}
+            for effort in detailed_activity.segment_efforts:
+                achievements: list[dict] = []
+                for achievement in effort.achievements:
+                    achievements.append({"rank": achievement.rank, "type": achievement.type})
+                activity_dict["achievements"][effort.id] = {"name": effort.name, "achievements": achievements}
+            
 
             data['data'][str(detailed_activity.id)] = activity_dict
         
