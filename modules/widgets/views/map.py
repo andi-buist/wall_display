@@ -35,13 +35,33 @@ class MapView(View):
         self.focus_button.clicked.connect(self.toggle_focus)
         layout.addWidget(self.focus_button)
 
-        QtCore.QTimer.singleShot(0, self.update_view)
+    def set_data(self, entities):
+        self.people = {id: e for id, e in entities.items() if 'person' in id}
+        self.zones = {id: e for id, e in entities.items() if 'zone' in id}
+        
+        super().set_data(entities) # triggers render() + data_ready
     
-    def _on_entities_updated(self, entities):
-        # Update zones and people lists, then redraw map
-        self.zones = {id: entity for id, entity in entities.items() if 'zone' in id}
-        self.people = {id: entity for id, entity in entities.items() if 'person' in id}
-        self.update_view()
+    def prepare_data(self):
+        # Determine focus
+        if self.map_focus == "all":
+            self.people_filtered = self.people
+        else: 
+            self.people_filtered = { k: v for k, v in self.people.items() if k == self.map_focus } 
+            
+        # If no people yet, return empty structure 
+        if not self.people_filtered: 
+            return {"plot_params": None, "data": {}}
+        
+        # Compute params
+        coords = [(p['attributes']['longitude'], p['attributes']['latitude']) for p in self.people_filtered.values()]
+        plot_params = calculate_plot_params(coords)
+        
+        # External astronomy data
+        self.people_movement_data = get_people_movement_data(self.people_filtered)
+        
+        return {
+            "plot_params": plot_params
+            }
     
     def toggle_focus(self):
         focus_options = ["all"] + sorted(list(self.people.keys()))
@@ -54,60 +74,49 @@ class MapView(View):
             self.focus_button.setText(f"Focus: {self.people[self.map_focus]['attributes']['friendly_name']}")
         else:
             self.focus_button.setText(f"Focus: {self.map_focus.title()}")
-        self.update_view()
-    
-    def get_data(self):
-        extent = calculate_extent([(p['attributes']['longitude'], p['attributes']['latitude']) for p in self.people_filtered.values()])
+        
+        self.render()
 
-        self.people_movement_data = get_people_movement_data(self.people_filtered)
-        return {
-            "extent": extent
-        }
-    
-    def update_view(self):
+    def render(self):
+        # Determine label size
         self.label_size = int(min(self.view_label.width(), self.view_label.height()))
-        match self.map_focus:
-            case 'all':
-                self.people_filtered = self.people
-            case _:
-                self.people_filtered = {k:v for k,v in self.people.items() if k == self.map_focus}
 
-        # main call to image generator
-        view_data = self.get_data()
-        QtCore.QTimer.singleShot(0, lambda: self._deferred_render_visuals(view_data))
-    
-    def _deferred_render_visuals(self, view_data: dict):
+        prepared = self.prepare_data()
+
+        # If no data yet, show placeholder
+        if not prepared["plot_params"]:
+            self.view_label.setText("Loading...")
+            return
+        
         try: 
-            image = self.render_visuals(view_data)
-            if image:
-                pixmap = image_to_formatted_pixmap(image, self.label_size)
-                self.view_label.setPixmap(pixmap)
-            else:
-                self.view_label.setText("Loading...")
-        except Exception as e:
-            # generic image as a placeholder (when no data)
-            image = Image.open(theme.filestore['ui']['img']['bug'])
+            image = self.render_visuals(prepared)
             pixmap = image_to_formatted_pixmap(image, self.label_size)
+            self.view_label.setPixmap(pixmap)
+            self.view_label_info.clear()
+        except Exception as e: 
+            fallback = Image.open(theme.filestore['ui']['img']['bug'])
+            pixmap = image_to_formatted_pixmap(fallback, self.label_size)
             self.view_label.setPixmap(pixmap)
             self.view_label_info.setText(str(e))
 
-    def render_visuals(self, view_data: dict) -> Image.Image:
+    def render_visuals(self, prepared_data: dict) -> Image.Image:
         # map plot setup ----
         plt.rcParams['font.family'] = "Nintendo DS BIOS"
+        
         label_store = []
 
         if len(self.zones) == 0 and len(self.people) == 0: # loading
             return None
         
-        extent = view_data['extent']
+        plot_params = prepared_data['plot_params']
 
-        map_bg = get_map_image(self.label_size, extent['extent'], extent['dimension'], extent['min_dimension'], 128, 1)
+        fig, ax = plt_make(plot_params['extent'])
+        
+        map_bg = get_map_image(self.label_size, plot_params['extent'], plot_params['dimension'], plot_params['min_dimension'], 128, 1)
+        ax.imshow(map_bg, extent = plot_params['extent'])
 
-        fig, ax = plt_make(extent)
-        ax.imshow(map_bg, extent = extent['extent'])
-
-        label_store = self.plt_add_zones(ax, -extent['buffer'], label_store)
-        label_store = self.plt_add_people(ax, extent['buffer'], label_store)
+        label_store = self.plt_add_zones(ax, -plot_params['buffer'], label_store)
+        label_store = self.plt_add_people(ax, plot_params['buffer'], label_store)
 
         self.view_label_info.clear()
 
@@ -123,6 +132,8 @@ class MapView(View):
 
         return image
     
+    # plotting functions
+
     def plt_add_zones(self, ax: plt.Axes, label_offset: float, label_store: list) -> list:
         label_store = label_store
         for entity in self.zones.values():

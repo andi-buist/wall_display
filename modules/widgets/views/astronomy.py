@@ -15,35 +15,51 @@ class AstronomyView(View):
         self.map_focus = "all"
         self.people = {}
         self.people_filtered = {}
-        self.people_movement_data = {}
-        self.zones = {}
 
         layout = QtWidgets.QVBoxLayout()
         self.setLayout(layout)
 
-        # view label
         self.view_label = QtWidgets.QLabel()
         self.view_label.setAlignment(QtCore.Qt.AlignCenter)
         self.view_label.setSizePolicy(QtWidgets.QSizePolicy.Policy.Expanding, QtWidgets.QSizePolicy.Policy.Expanding)
         layout.addWidget(self.view_label)
 
-        # label below viewer (text etc)
         self.view_label_info = QtWidgets.QLabel()
         self.view_label_info.setAlignment(QtCore.Qt.AlignCenter)
         layout.addWidget(self.view_label_info)
 
-        # buttons
         self.focus_button = QtWidgets.QPushButton("Focus: All")
         self.focus_button.clicked.connect(self.toggle_focus)
         layout.addWidget(self.focus_button)
 
-        QtCore.QTimer.singleShot(0, self.update_view)
+    def set_data(self, entities):
+        self.people = {id: e for id, e in entities.items() if 'person' in id}
+        
+        super().set_data(entities) # triggers render() + data_ready
     
-    def _on_entities_updated(self, entities):
-        # Update zones and people lists, then redraw map
-        self.zones = {id: entity for id, entity in entities.items() if 'zone' in id}
-        self.people = {id: entity for id, entity in entities.items() if 'person' in id}
-        self.update_view()
+    def prepare_data(self):
+        # Determine focus
+        if self.map_focus == "all":
+            self.people_filtered = self.people
+        else: 
+            self.people_filtered = { k: v for k, v in self.people.items() if k == self.map_focus } 
+            
+        # If no people yet, return empty structure 
+        if not self.people_filtered: 
+            return {"plot_params": None, "data": {}}
+        
+        # Compute params
+        coords = [(p['attributes']['longitude'], p['attributes']['latitude']) for p in self.people_filtered.values()]
+        plot_params = calculate_plot_params(coords)
+        
+        # External astronomy data
+        astro = get_astronomy_map_data(token_config["astronomy_lon_lat"], plot_params['extent'], (plot_params['dimension'] / 2) + (plot_params['buffer'] / 2))
+        astro = self.kiosk_select_data(astro) 
+        
+        return {
+            "plot_params": plot_params,
+            "data": astro
+            }
     
     def toggle_focus(self):
         focus_options = ["all"] + sorted(list(self.people.keys()))
@@ -56,60 +72,40 @@ class AstronomyView(View):
             self.focus_button.setText(f"Focus: {self.people[self.map_focus]['attributes']['friendly_name']}")
         else:
             self.focus_button.setText(f"Focus: {self.map_focus.title()}")
-        self.update_view()
+        
+        self.render()
 
-    def get_data(self):
-        extent = calculate_extent([(p['attributes']['longitude'], p['attributes']['latitude']) for p in self.people_filtered.values()])
-        astro = get_astronomy_map_data(
-            token_config["astronomy_lon_lat"],
-            extent['extent'],
-            (extent['dimension']/2) + (extent['buffer']/2)
-        )
-        return {
-            "extent": extent,
-            "data": self.kiosk_select_data(astro)
-        }
-
-    def update_view(self):
+    def render(self):
+        # Determine label size
         self.label_size = int(min(self.view_label.width(), self.view_label.height()))
-        match self.map_focus:
-            case 'all':
-                self.people_filtered = self.people
-            case _:
-                self.people_filtered = {k:v for k,v in self.people.items() if k == self.map_focus}
 
-        # main call to image generator
-        view_data = self.get_data()
-        QtCore.QTimer.singleShot(0, lambda: self._deferred_render_visuals(view_data))
+        prepared = self.prepare_data()
 
-    def _deferred_render_visuals(self, view_data: dict):
+        # If no data yet, show placeholder
+        if not prepared["plot_params"]:
+            self.view_label.setText("Loading...")
+            return
+        
         try: 
-            image = self.render_visuals(view_data)
-            if image:
-                pixmap = image_to_formatted_pixmap(image, self.label_size)
-                self.view_label.setPixmap(pixmap)
-            else:
-                self.view_label.setText("Loading...")
-        except Exception as e:
-            # generic image as a placeholder (when no data)
-            image = Image.open(theme.filestore['ui']['img']['bug'])
+            image = self.render_visuals(prepared)
             pixmap = image_to_formatted_pixmap(image, self.label_size)
+            self.view_label.setPixmap(pixmap)
+            self.view_label_info.clear()
+        except Exception as e: 
+            fallback = Image.open(theme.filestore['ui']['img']['bug'])
+            pixmap = image_to_formatted_pixmap(fallback, self.label_size)
             self.view_label.setPixmap(pixmap)
             self.view_label_info.setText(str(e))
 
-    def render_visuals(self, view_data: dict) -> Image.Image:
+    def render_visuals(self, prepared_data: dict) -> Image.Image:
         # map plot setup ----
         plt.rcParams['font.family'] = "Nintendo DS BIOS"
         
-        extent = view_data['extent']
-        data = view_data['data']
+        plot_params = prepared_data['plot_params']
+        data = prepared_data['data']
 
-        map_bg = get_map_image(self.label_size, extent['extent'], extent['dimension'], extent['min_dimension'], 128, 1)
-
-        fig, ax = plt_make(extent)
-        ax.imshow(map_bg, extent = extent['extent'])
-
-        self.plt_add_astronomy(data, ax, extent['centre'], extent['extent'], (extent['dimension']/2) + (extent['buffer']/2)) # +map buffer would have circle perfectly fit square, but we want some allowance for icons
+        fig, ax = plt_make(plot_params['extent'])
+        self.plt_add_astronomy(data, ax, plot_params) # +map buffer would have circle perfectly fit square, but we want some allowance for icons
 
         self.view_label_info.clear()
 
@@ -123,7 +119,17 @@ class AstronomyView(View):
 
         return image
     
-    def plt_add_astronomy(self, data: dict, ax: plt.Axes, lon_lat: tuple, extent: list, max_radius: float) -> None:
+    # plotting function
+
+    def plt_add_astronomy(self, data: dict, ax: plt.Axes, plot_params: dict) -> None:
+
+        lon_lat = plot_params['centre']
+        extent = plot_params['extent']
+        max_radius = (plot_params['dimension']/2) + (plot_params['buffer']/2)
+        
+        map_bg = get_map_image(self.label_size, plot_params['extent'], plot_params['dimension'], plot_params['min_dimension'], 128, 1)
+        ax.imshow(map_bg, extent=extent)
+
         if len(data) > 0: 
             # plot crosshair
             ax.axvline(x = lon_lat[0], color = "#000000")
@@ -135,7 +141,10 @@ class AstronomyView(View):
             # index-wise plotting due to kiosk
             astro_markers = []
             for key, value in data['data'].items():
-                conversion = alt_az_to_viewport(value['position'], lon_lat, extent, max_radius)
+
+                # screen space coordinates
+                position_conversion = alt_az_to_viewport(value['position'], lon_lat, extent, max_radius)
+                history_conversion = [alt_az_to_viewport(position, lon_lat, extent, max_radius) for position in value['history']]
 
                 if not data["kiosk_selected"]:
                     is_focus = False
@@ -156,13 +165,14 @@ class AstronomyView(View):
                     line_color = "#999999"
                     line_width = 1
 
-                ax.plot(*zip(*value['history']),
+                # plot history trails
+                ax.plot(*zip(*history_conversion),
                     color = line_color,
                     linewidth = line_width,
                     zorder = 1)
 
                 astro_icon_image = OffsetImage(value['icon'], zoom = zoom_level, interpolation = 'bicubic')
-                astro_marker = AnnotationBbox(astro_icon_image, conversion, frameon = False, annotation_clip = True)
+                astro_marker = AnnotationBbox(astro_icon_image, position_conversion, frameon = False, annotation_clip = True)
                 astro_marker.set_clip_on(True)
 
                 # add markers to list to render later
@@ -171,8 +181,9 @@ class AstronomyView(View):
                 else:
                     astro_markers.insert(0, astro_marker) # push to front, render... not last.
 
-                if len(legend_text) > 0: legend_text = legend_text + "\n" # separate lines
-                legend_text = f"{legend_text}{value['name']}: {round((180/math.pi)  *value['position'][0],1)},{round((180/math.pi) * value['position'][1],1)}{focused_str}"
+                if len(legend_text) > 0: 
+                    legend_text = legend_text + "\n" # separate lines
+                legend_text = f"{legend_text}{value['name']}: {round((180/math.pi) * value['position'][0],1)},{round((180/math.pi) * value['position'][1],1)}{focused_str}"
 
             # render marker list
             for astro_marker in astro_markers:
@@ -232,13 +243,12 @@ def get_astronomy_map_data(lon_lat: tuple, extent: dict, max_radius: float) -> d
                 localcache_write("./data/astro_position_log.json",
                                     body_id,
                                     dateutil.parser.parse(body_data['timestamp']).timestamp(),
-                                    body_data['position'],
+                                    data[body_id]['position'],
                                     24) # assign back
         
             # read position history
             position_history = localcache_read("./data/astro_position_log.json", body_id).values()
             position_history = sorted(position_history, key=lambda x: x[1]) # sort by azimuth (prevents line joining across discontinuity)
-            position_history = [alt_az_to_viewport(position, lon_lat, extent, max_radius) for position in position_history]
 
             data[body_id]['history'] = position_history
         

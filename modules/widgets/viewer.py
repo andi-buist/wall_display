@@ -89,20 +89,13 @@ class Viewer(HASSWidget):
         except Exception: 
             pass 
 
-        self.view = self.view_options[self.view_choice]() 
-        self.view.data_ready.connect(self.update_infobox) 
-
+        self.view = self.view_options[self.view_choice]()
         self.build_right_panel() 
 
         if self.view_choice in self.infobox_options: 
-            self.infobox = self.infobox_options[self.view_choice]({}) 
+            self.infobox = self.infobox_options[self.view_choice]({})
             
         self.build_left_panel()
-
-    def update_infobox(self, view_data): 
-        if self.view_choice in self.infobox_options: 
-            self.infobox = self.infobox_options[self.view_choice](view_data) 
-            self.build_left_panel()
 
     def build_left_panel(self):
         # clear existing
@@ -118,5 +111,5 @@ class Viewer(HASSWidget):
         while (item := self.view_panel_right_layout.takeAt(0)) is not None:
             if item.widget():
                 item.widget().deleteLater()
-        print(self.view)
+                
         self.view_panel_right_layout.addWidget(self.view)

@@ -23,79 +23,64 @@ class StravaView(View):
         self.view_label_info = QtWidgets.QLabel()
         self.view_label_info.setAlignment(QtCore.Qt.AlignCenter)
         layout.addWidget(self.view_label_info)
-
-        QtCore.QTimer.singleShot(0, self.update_view)
     
-    def _on_entities_updated(self, entities):
-        self.update_view()
+    def set_data(self, entities): # in Views like strava, this is sort of overkill since no data is extracted, but it's an available timer
+        super().set_data(entities) # triggers render() + data_ready
 
-    def get_data(self):
+    def prepare_data(self):
         data = get_strava_map_data(period = (datetime.datetime.today() - datetime.timedelta(days=30), datetime.datetime.now()))
         data = self.kiosk_select_data(data, start_unselected=False)
-        kiosk_data = data['data'][data['kiosk_selected']]
 
-        # compute extent
-        if data["kiosk_selected"]:
-            extent = calculate_extent(kiosk_data['polyline'])
-        else:
-            coords = []
-            for v in data['data'].values():
-                coords.extend(v['polyline'])
-            extent = calculate_extent(coords)
+        plot_params = calculate_plot_params(data['data'][data['kiosk_selected']]['polyline'])
 
         return {
-            "extent": extent,
+            "plot_params": plot_params,
             "data": data
         }
-
-    def update_view(self):
-        # main call to image generator
-        view_data = self.get_data()
-        QtCore.QTimer.singleShot(0, lambda: self._deferred_render_visuals(view_data))
     
-    def _deferred_render_visuals(self, view_data: dict):
+    def render(self):
+        # Determine label size
+        self.label_size = int(min(self.view_label.width(), self.view_label.height()))
+
+        prepared = self.prepare_data()
+
+        # If no data yet, show placeholder
+        if not prepared["plot_params"]:
+            self.view_label.setText("Loading...")
+            return
+        
         try: 
-            image = self.render_visuals(view_data)
-            if image:
-                pixmap = image_to_formatted_pixmap(image, self.label_size)
-                self.view_label.setPixmap(pixmap)
-            else:
-                self.view_label.setText("Loading...")
-        except Exception as e:
-            # generic image as a placeholder (when no data)
-            image = Image.open(theme.filestore['ui']['img']['bug'])
+            image = self.render_visuals(prepared)
             pixmap = image_to_formatted_pixmap(image, self.label_size)
+            self.view_label.setPixmap(pixmap)
+            
+            kiosk_data = prepared['data']['data'][prepared['data']['kiosk_selected']]
+            time_str = kiosk_data['start_date'].strftime('%A %d %b, %H:%M')
+            run_length = str(round(kiosk_data['distance']/1000,1)) + "k"
+            self.view_label_info.setText(f"{time_str}: {run_length}")
+        except Exception as e: 
+            fallback = Image.open(theme.filestore['ui']['img']['bug'])
+            pixmap = image_to_formatted_pixmap(fallback, self.label_size)
             self.view_label.setPixmap(pixmap)
             self.view_label_info.setText(str(e))
 
-    def render_visuals(self, view_data: dict) -> Image.Image:
+    def render_visuals(self, prepared_data: dict) -> Image.Image:
         # map plot setup ----
         plt.rcParams['font.family'] = "Nintendo DS BIOS"
 
         self.label_size = int(min(self.view_label.width(), self.view_label.height()))
         
-        data = view_data['data']
+        data = prepared_data['data']
         kiosk_data = data['data'][data['kiosk_selected']]
 
-        if data["kiosk_selected"]:
-            extent = calculate_extent(kiosk_data['polyline'])
-        else:
-            coord_list = []
-            for value in data['data'].values():
-                coord_list = coord_list + [x for x in value['polyline']]
-            extent = calculate_extent(coord_list)
+        plot_params = prepared_data['plot_params']
 
-        map_bg =  get_map_image(self.label_size, extent['extent'], extent['dimension'], extent['min_dimension'], 128, 1)
+        map_bg =  get_map_image(self.label_size, plot_params['extent'], plot_params['dimension'], plot_params['min_dimension'], 128, 1)
 
-        fig, ax = plt_make(extent)
-        ax.imshow(map_bg, extent = extent['extent'])
+        fig, ax = plt_make(plot_params['extent'])
+        ax.imshow(map_bg, extent = plot_params['extent'])
 
-        plt_add_strava_view(ax, data)
-
-        time_str = kiosk_data['start_date'].strftime('%A %d %b, %H:%M')
-        run_length = str(round(kiosk_data['distance']/1000,1)) + "k"
-
-        self.view_label_info.setText(f"{time_str}: {run_length}")
+        plt_add_strava_view(ax, kiosk_data)
 
         image_buffer = BytesIO()
         fig.savefig(image_buffer, format = 'png', bbox_inches='tight', pad_inches = 0)
@@ -115,24 +100,25 @@ def get_strava_map_data(type: str = None,
 
     for key, value in data['data'].items():
         data['data'][key]['start_date'] = datetime.datetime.fromtimestamp(value['start_date'])
-
     return data
 
 def plt_add_strava_view(ax: plt.Axes, data: dict) -> None:
-    if len(data['data'].values()) > 0:
-        if not data['kiosk_selected']:
-            for value in data['data'].values():
-                    ax.plot([x[0] for x in value['polyline']],
-                            [x[1] for x in value['polyline']],
-                            color = "#000",
-                            linewidth = 5,
-                            linestyle = 'solid',
-                            zorder = 1)
-        else:
-            poly = data['data'][data['kiosk_selected']]['polyline']
-            ax.plot([x[0] for x in poly],
-                    [x[1] for x in poly],
-                    color = "#000",
-                    linewidth = 5,
-                    linestyle = 'solid',
-                    zorder = 1)
+    if len(data['polyline']) > 0:
+        ax.plot([x[0] for x in data['polyline']],
+                [x[1] for x in data['polyline']],
+                color = "#000",
+                linewidth = 5,
+                linestyle = 'solid',
+                zorder = 1)
+    else:
+        # no activity data to plot, show placeholder
+        legend_text = "No recent activity... \nCheck back later!"
+        legend_bbox = dict(alpha = 1, edgecolor = "#000000", facecolor = "#ffffff")
+        ax.text(0.5, 
+                0.5, 
+                legend_text, 
+                transform = ax.transAxes, 
+                fontsize = 24, 
+                verticalalignment = 'center',
+                horizontalalignment = 'center',
+                bbox = legend_bbox)

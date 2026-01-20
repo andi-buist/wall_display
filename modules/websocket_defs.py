@@ -13,7 +13,8 @@ class HASSDataManager(QtCore.QObject):
 
     def __init__(self, parent=None):
         super().__init__(parent)
-        self.entities = {}  # entity_id -> entity dict
+        self.entities = {}
+        self.entities_updated.emit(self.entities)
 
         # Single websocket
         self.ws = QtWebSockets.QWebSocket()

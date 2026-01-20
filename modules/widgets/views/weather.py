@@ -29,40 +29,43 @@ class WeatherView(View):
         self.view_label_info = QtWidgets.QLabel()
         self.view_label_info.setAlignment(QtCore.Qt.AlignCenter)
         layout.addWidget(self.view_label_info)
-
-        QtCore.QTimer.singleShot(0, self.update_view)
     
-    def _on_entities_updated(self, entities):
-        # Update people list, then redraw map
-        self.people = {id: entity for id, entity in entities.items() if 'person' in id}
-        self.update_view()
+    def set_data(self, entities):
+        self.people = {id: e for id, e in entities.items() if 'person' in id}
+        
+        super().set_data(entities) # triggers render() + data_ready
     
-
-    def get_data(self):
-        extent = calculate_extent([(p['attributes']['longitude'], p['attributes']['latitude']) for p in self.people.values()], extent_dimension = 2.25)
-        return {"extent": extent}
-
-    def update_view(self):
-        # main call to image generator
-        view_data = self.get_data()
-        QtCore.QTimer.singleShot(0, lambda: self._deferred_render_visuals(view_data))
+    def prepare_data(self):
+        # Compute params
+        plot_params = calculate_plot_params([(p['attributes']['longitude'], p['attributes']['latitude']) for p in self.people.values()], extent_dimension = 2.25)
+        
+        return {
+            "plot_params": plot_params
+            }
     
-    def _deferred_render_visuals(self, view_data: dict):
+    def render(self):
+        # Determine label size
+        self.label_size = int(min(self.view_label.width(), self.view_label.height()))
+
+        prepared = self.prepare_data()
+
+        # If no data yet, show placeholder
+        if not prepared["plot_params"]:
+            self.view_label.setText("Loading...")
+            return
+        
         try: 
-            image = self.render_visuals(view_data)
-            if image:
-                pixmap = image_to_formatted_pixmap(image, self.label_size)
-                self.view_label.setPixmap(pixmap)
-            else:
-                self.view_label.setText("Loading...")
-        except Exception as e:
-            # generic image as a placeholder (when no data)
-            image = Image.open(theme.filestore['ui']['img']['bug'])
+            image = self.render_visuals(prepared)
             pixmap = image_to_formatted_pixmap(image, self.label_size)
+            self.view_label.setPixmap(pixmap)
+            self.view_label_info.clear()
+        except Exception as e: 
+            fallback = Image.open(theme.filestore['ui']['img']['bug'])
+            pixmap = image_to_formatted_pixmap(fallback, self.label_size)
             self.view_label.setPixmap(pixmap)
             self.view_label_info.setText(str(e))
 
-    def render_visuals(self, view_data: dict) -> Image.Image:
+    def render_visuals(self, prepared_data: dict) -> Image.Image:
         # map plot setup ----
         plt.rcParams['font.family'] = "Nintendo DS BIOS"
 
@@ -71,13 +74,13 @@ class WeatherView(View):
         if len(self.people) == 0: # loading
             return None
         
-        extent = view_data['extent']
-        map_bg = get_map_image(self.label_size, extent['extent'], extent['dimension'], extent['min_dimension'], 128, 1)
+        plot_params = prepared_data['plot_params']
+        map_bg = get_map_image(self.label_size, plot_params['extent'], plot_params['dimension'], plot_params['min_dimension'], 128, 1)
 
-        fig, ax = plt_make(extent)
-        ax.imshow(map_bg, extent = extent['extent'])
+        fig, ax = plt_make(plot_params['extent'])
+        ax.imshow(map_bg, extent = plot_params['extent'])
 
-        self.plt_add_met_office_view(ax, extent['extent'], type = self.overlay_type)
+        self.plt_add_met_office_view(ax, plot_params['extent'], type = self.overlay_type)
 
         self.view_label_info.clear()
 

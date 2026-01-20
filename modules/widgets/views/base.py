@@ -15,13 +15,15 @@ from modules.widgets.widget_core import *
 from modules.caching import *
 from modules.api.get_data import *
 
-class View(HASSWidget):
+class View(QtWidgets.QWidget):
     data_ready = QtCore.Signal(dict)
     def __init__(self, data_manager: HASSDataManager):
-        super().__init__(data_manager)
+        super().__init__()
+        self.data_manager = data_manager
+        self.latest_entity_data = {}
 
-        data_manager.entities_updated.connect(self._on_entities_updated)
-        data_manager.entity_state_changed.connect(self._on_entity_state_changed)
+        data_manager.entities_updated.connect(self.set_data)
+        data_manager.entity_state_changed.connect(self.update_single)
 
         self.kiosk_index = 0
 
@@ -30,14 +32,33 @@ class View(HASSWidget):
         self.kiosk_timer.timeout.connect(self.on_kiosk_timer_next)
         self.kiosk_timer.start()
 
-        QtCore.QTimer.singleShot(0, self.update_view)
+        QtCore.QTimer.singleShot(0, self._apply_initial_data_snapshot)
+    
+    def resizeEvent(self, event):
+        super().resizeEvent(event)
+        self.render()
+    
+    def _apply_initial_data_snapshot(self): 
+        if self.data_manager.entities: 
+            self.set_data(self.data_manager.entities)
 
+    def set_data(self, entities):
+        self.latest_entity_data = entities
+        self.render()
+        self.data_ready.emit(entities) # to transmit to infobox
+
+    def update_single(self, entity):
+        self.latest_entity_data[entity['entity_id']] = entity
+        self.render()
+    
     # when kiosk timer triggers, tick index up, update map
     def on_kiosk_timer_next(self):
         self.kiosk_index += 1
-        self.update_view()
-    
-    def update_view(self):
+        self.render()
+
+    def render(self):
+        """Override in subclasses"""
+        print(f"{self} is still using the base.py render() function. Are you sure your subclass is set up correctly?")
         pass
 
     def kiosk_select_data(self, data: dict, start_unselected: bool = True) -> dict:
@@ -56,16 +77,12 @@ class View(HASSWidget):
         
         return data
     
-    def get_data(self) -> dict:
-        return None
-
-"""Public Functions for Views"""
-def plt_make(extent: dict = None):
+def plt_make(extent: tuple[float,float,float,float] = None):
     fig, ax = plt.subplots(figsize = (8,8))
     plt.axis('off')
     if extent:
-        ax.set_xlim(extent['extent'][0], extent['extent'][1])
-        ax.set_ylim(extent['extent'][2], extent['extent'][3])
+        ax.set_xlim(extent[0], extent[1])
+        ax.set_ylim(extent[2], extent[3])
     return fig, ax
 
 def get_map_image(size: int, extent: list, aspect: float, min_aspect: float, brightness: float, contrast: float) -> Image.Image:
@@ -110,7 +127,7 @@ def get_map_image(size: int, extent: list, aspect: float, min_aspect: float, bri
     map_bg = ImageEnhance.Contrast(Image.merge(map_bg.mode, [x.point(lambda i: i + ((1 - (i/255)) * brightness)) for x in map_bg.split()])).enhance(contrast)
     return map_bg
 
-def calculate_extent(lon_lat: list[tuple[float,float]], buffer_amount: float = 0.1, extent_dimension: float = None, min_dimension: float = 0.0015) -> dict:
+def calculate_plot_params(lon_lat: list[tuple[float,float]], buffer_amount: float = 0.1, extent_dimension: float = None, min_dimension: float = 0.0015) -> dict:
     lon_values = [x[0] for x in lon_lat]
     lat_values = [x[1] for x in lon_lat]
     
