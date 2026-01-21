@@ -56,15 +56,15 @@ class HASSApp(QtWidgets.QApplication):
              'widget': Viewer(self.data_manager,
                               self.kiosk_controller,
                               view_options = {
-                                  "map": lambda parent: MapView(self.data_manager, parent),
-                                  "astronomy": lambda parent: AstronomyView(self.data_manager, self.kiosk_controller, parent),
-                                  "weather: precipitation": lambda parent: WeatherView(self.data_manager, 'precipitation', parent),
-                                  "weather: temperature": lambda parent: WeatherView(self.data_manager, 'temperature', parent),
-                                  "weather: cloud": lambda parent: WeatherView(self.data_manager, 'cloud', parent),
-                                  "strava": lambda parent: StravaView(self.data_manager, self.kiosk_controller, parent)
+                                  "map": (MapView,{}),
+                                  "astronomy": (AstronomyView, {"kiosk_controller": self.kiosk_controller}),
+                                  "weather: precipitation": (WeatherView, {"overlay_type": 'precipitation'}),
+                                  "weather: temperature": (WeatherView, {"overlay_type": 'temperature'}),
+                                  "weather: cloud": (WeatherView, {"overlay_type": 'cloud'}),
+                                  "strava": (StravaView, {"kiosk_controller": self.kiosk_controller})
                                   },
                                   infobox_options = {
-                                    "strava": lambda parent: StravaInfoBox(self.data_manager, self.kiosk_controller, parent)
+                                    "strava": (StravaInfoBox, {"kiosk_controller": self.kiosk_controller})
                                   }
                                   )},
             {'label': "Terminal",

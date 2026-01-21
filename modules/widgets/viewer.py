@@ -93,12 +93,14 @@ class Viewer(HASSWidget):
 
         # add infobox if needed
         if self.view_choice in self.infobox_options.keys():
-            self.infobox = self.infobox_options[self.view_choice](self.view_panel_left)
+            cls, kwargs = self.infobox_options[self.view_choice]
+            self.infobox = cls(data_manager = self.data_manager, parent = self.view_panel_left, **kwargs)
             self.view_panel_left_layout.addWidget(self.infobox)
         
         # add view if needed
         if self.view_choice in self.view_options.keys():
-            self.view = self.view_options[self.view_choice](self.view_panel_right)
+            cls, kwargs = self.view_options[self.view_choice]
+            self.view = cls(data_manager = self.data_manager, parent = self.view_panel_right, **kwargs)
             self.view_panel_right_layout.addWidget(self.view)
     
     def clear_panels(self):
