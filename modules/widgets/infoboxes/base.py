@@ -6,7 +6,7 @@ from modules.api.get_data import *
 from modules.widgets.kiosk import *
 
 class InfoBox(QtWidgets.QWidget):
-    def __init__(self, data_manager: HASSDataManager, kiosk_controller: KioskController, parent=None):
+    def __init__(self, data_manager: DataManager, kiosk_controller: KioskController, parent=None):
         super().__init__(parent)
         self.data_manager = data_manager
         self.latest_entity_data = {}

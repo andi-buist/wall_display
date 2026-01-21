@@ -11,7 +11,7 @@ from modules.widgets.views.strava import get_strava_map_data
 
 
 class StravaInfoBox(InfoBox): 
-    def __init__(self, data_manager: HASSDataManager, kiosk_controller: KioskController, parent=None): 
+    def __init__(self, data_manager: DataManager, kiosk_controller: KioskController, parent=None): 
         super().__init__(data_manager, kiosk_controller, parent)
         self.layout: QtWidgets.QVBoxLayout = QtWidgets.QVBoxLayout()
         self.setLayout(self.layout)

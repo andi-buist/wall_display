@@ -10,7 +10,7 @@ from scipy import ndimage
 import numpy as np
 
 class WeatherView(View):
-    def __init__(self, data_manager: HASSDataManager, overlay_type: Literal["cloud", "temperature", "precipitation"], parent=None):
+    def __init__(self, data_manager: DataManager, overlay_type: Literal["cloud", "temperature", "precipitation"], parent=None):
         super().__init__(data_manager, parent = parent)
         self.overlay_type = overlay_type
 

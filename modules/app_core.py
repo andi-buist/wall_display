@@ -1,7 +1,7 @@
 from PySide6 import QtCore, QtWidgets
 from websocket import *
 
-from modules.websocket_defs import *
+from modules.data_manager import *
 from modules.widgets.buttons import *
 from modules.widgets.viewer import *
 from modules.widgets.views.astronomy import *
@@ -13,7 +13,7 @@ from modules.widgets.rgb_spinner import *
 from modules.widgets.terminal import *
 import theme
 
-class HASSApp(QtWidgets.QApplication):
+class HomeApp(QtWidgets.QApplication):
     def __init__(self, resolution: tuple[int] = (800,480)):
         QtWidgets.QApplication.__init__(self)
         self.kiosk_controller = KioskController()
@@ -38,7 +38,7 @@ class HASSApp(QtWidgets.QApplication):
         layout = QtWidgets.QHBoxLayout(central_widget)
 
         # create a data manager
-        self.data_manager = HASSDataManager()
+        self.data_manager = DataManager()
         self.data_manager.entities_updated.connect(self.on_entities_updated)
         self.data_manager.entity_state_changed.connect(self.on_entity_state_changed)
 

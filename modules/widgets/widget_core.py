@@ -1,11 +1,11 @@
 from PySide6 import QtCore, QtWidgets
 from PySide6.QtGui import QImage, QPixmap
-from ..websocket_defs import HASSDataManager
+from ..data_manager import DataManager
 import theme
 
 class HASSWidget(QtWidgets.QWidget):
     def __init__(self,
-                 data_manager: HASSDataManager,
+                 data_manager: DataManager,
                  entity_types: str | list[str] = None,
                  entity_ids: str | list[str] = None, 
                  parent = None,

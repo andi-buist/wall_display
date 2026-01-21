@@ -7,7 +7,7 @@ with open("tokens.json") as f:
 HASS_WS_URL = hass_config['url']
 TOKEN = hass_config['secret']
 
-class HASSDataManager(QtCore.QObject):
+class DataManager(QtCore.QObject):
     entities_updated = QtCore.Signal(dict)  # Emitted when all entities are refreshed
     entity_state_changed = QtCore.Signal(dict)  # Emitted when a single entity changes
 
