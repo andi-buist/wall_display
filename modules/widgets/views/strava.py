@@ -2,14 +2,12 @@ from modules.widgets.views.base import *
 from PySide6 import QtWidgets
 
 from io import BytesIO
-import dateutil
 from PIL import Image
 import matplotlib.pyplot as plt
-from adjustText import adjust_text
 
 class StravaView(View):
-    def __init__(self, data_manager: HASSDataManager):
-        super().__init__(data_manager)
+    def __init__(self, data_manager: HASSDataManager, kiosk_controller: KioskController, parent=None):
+        super().__init__(data_manager, kiosk_controller, parent)
         layout = QtWidgets.QVBoxLayout()
         self.setLayout(layout)
 
@@ -25,7 +23,7 @@ class StravaView(View):
         layout.addWidget(self.view_label_info)
     
     def set_data(self, entities): # in Views like strava, this is sort of overkill since no data is extracted, but it's an available timer
-        super().set_data(entities) # triggers render() + data_ready
+        super().set_data(entities)
 
     def prepare_data(self):
         data = get_strava_map_data(period = (datetime.datetime.today() - datetime.timedelta(days=30), datetime.datetime.now()))

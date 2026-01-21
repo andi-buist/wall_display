@@ -9,6 +9,7 @@ from typing import Callable
 from modules.widgets.widget_core import *
 from modules.caching import *
 from modules.api.get_data import *
+from modules.widgets.kiosk import KioskController
 from modules.widgets.infoboxes.base import InfoBox
 from modules.widgets.views.base import View
 
@@ -19,8 +20,10 @@ matplotlib.use('agg')
 cartopy.config['cache_dir'] = "./.cache/cartopy/"
 
 class Viewer(HASSWidget):
-    def __init__(self, data_manager: HASSDataManager, view_options: dict[str, Callable[[], View]], infobox_options: dict[str, Callable[[], InfoBox]] = None):
+    def __init__(self, data_manager: HASSDataManager, kiosk_controller: KioskController, view_options: dict[str, Callable[[], View]], infobox_options: dict[str, Callable[[], InfoBox]] = None):
         super().__init__(data_manager)
+        self.kiosk_controller = kiosk_controller
+
         self.view_options = view_options
         self.infobox_options = infobox_options
 
@@ -74,8 +77,10 @@ class Viewer(HASSWidget):
 
         self.rebuild_viewer()
 
-    # Command invoked to toggle map view
+    # Command invoked to toggle view
     def toggle_view(self):
+        self.kiosk_controller.reset()
+
         view_options = list(self.view_options.keys())
         idx = view_options.index(self.view_choice)
         self.view_choice = view_options[(idx + 1) % len(view_options)]
@@ -84,32 +89,20 @@ class Viewer(HASSWidget):
         self.rebuild_viewer()
 
     def rebuild_viewer(self):
-        try: 
-            self.view.data_ready.disconnect(self.update_infobox) 
-        except Exception: 
-            pass 
+        self.clear_panels()
 
-        self.view = self.view_options[self.view_choice]()
-        self.build_right_panel() 
-
-        if self.view_choice in self.infobox_options: 
-            self.infobox = self.infobox_options[self.view_choice]({})
-            
-        self.build_left_panel()
-
-    def build_left_panel(self):
-        # clear existing
-        while (item := self.view_panel_left_layout.takeAt(0)) is not None:
-            if item.widget():
-                item.widget().deleteLater()
-        
-        if self.infobox:
+        # add infobox if needed
+        if self.view_choice in self.infobox_options.keys():
+            self.infobox = self.infobox_options[self.view_choice](self.view_panel_left)
             self.view_panel_left_layout.addWidget(self.infobox)
-
-    def build_right_panel(self):
-        # clear existing
-        while (item := self.view_panel_right_layout.takeAt(0)) is not None:
-            if item.widget():
-                item.widget().deleteLater()
-                
-        self.view_panel_right_layout.addWidget(self.view)
+        
+        # add view if needed
+        if self.view_choice in self.view_options.keys():
+            self.view = self.view_options[self.view_choice](self.view_panel_right)
+            self.view_panel_right_layout.addWidget(self.view)
+    
+    def clear_panels(self):
+        for layout in (self.view_panel_left_layout, self.view_panel_right_layout):
+            while (item := layout.takeAt(0)) is not None:
+                if item.widget():
+                    item.widget().deleteLater()

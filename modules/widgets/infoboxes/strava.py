@@ -6,16 +6,43 @@ from pathlib import Path
 import textwrap
 
 import theme
+from modules.widgets.views.base import calculate_plot_params
+from modules.widgets.views.strava import get_strava_map_data
 
 
 class StravaInfoBox(InfoBox): 
-    def __init__(self, view_data: dict): 
-        super().__init__() 
-        self.vbox = QtWidgets.QVBoxLayout(self)
-        self.achievement_count: int = 0
+    def __init__(self, data_manager: HASSDataManager, kiosk_controller: KioskController, parent=None): 
+        super().__init__(data_manager, kiosk_controller, parent)
+        self.layout: QtWidgets.QVBoxLayout = QtWidgets.QVBoxLayout()
+        self.setLayout(self.layout)
 
-        data = view_data['data']
+        self.achievement_count: int = 0
+    
+    def prepare_data(self):
+        data = get_strava_map_data(period = (datetime.datetime.today() - datetime.timedelta(days=30), datetime.datetime.now()))
+        data = self.kiosk_select_data(data, start_unselected=False)
+
+        plot_params = calculate_plot_params(data['data'][data['kiosk_selected']]['polyline'])
+
+        return {
+            "plot_params": plot_params,
+            "data": data
+        }
+    
+    def update_ui(self):
+        prepared = self.prepare_data()
+
+        if not prepared["plot_params"]:
+            self.view_label.setText("Loading...")
+            return
+
+        self.build_ui(prepared)
+    
+    def build_ui(self, prepared_data: dict):
+        data = prepared_data['data']
         kiosk_data = data['data'][data['kiosk_selected']]
+
+        self.clear()
 
         self.add_kcal(kiosk_data['calories'])
 
@@ -27,7 +54,7 @@ class StravaInfoBox(InfoBox):
         kcal_title_bar = QtWidgets.QLabel("Calories:")
         kcal_title_bar.setStyleSheet("font-weight: bold")
         kcal_title_bar.setAlignment(QtCore.Qt.AlignmentFlag.AlignCenter)
-        self.vbox.addWidget(kcal_title_bar)
+        self.layout.addWidget(kcal_title_bar)
 
         hbox = QtWidgets.QHBoxLayout()
         hbox.setAlignment(QtCore.Qt.AlignmentFlag.AlignLeft)
@@ -40,7 +67,7 @@ class StravaInfoBox(InfoBox):
 
         hbox.addWidget(icon) 
         hbox.addWidget(label)
-        self.vbox.addLayout(hbox)
+        self.layout.addLayout(hbox)
 
 
     def add_achievement(self, text: str = None, rank: Literal[1,2,3] = 1):
@@ -48,7 +75,7 @@ class StravaInfoBox(InfoBox):
             self.achievement_title_bar = QtWidgets.QLabel("No achievements")
             self.achievement_title_bar.setStyleSheet("font-weight: bold")
             self.achievement_title_bar.setAlignment(QtCore.Qt.AlignmentFlag.AlignCenter)
-            self.vbox.addWidget(self.achievement_title_bar)
+            self.layout.addWidget(self.achievement_title_bar)
 
         self.achievement_count += 1
         self.achievement_title_bar.setText(f"Achievements: {self.achievement_count}")
@@ -72,4 +99,21 @@ class StravaInfoBox(InfoBox):
 
         hbox.addWidget(icon) 
         hbox.addWidget(label)
-        self.vbox.addLayout(hbox)
+        self.layout.addLayout(hbox)
+    
+    def clear(self):
+        self.achievement_count = 0
+
+        while (item := self.layout.takeAt(0)) is not None:
+            if item.widget():
+                item.widget().deleteLater()
+            elif item.layout():
+                self._delete_layout(item.layout()) # start the looping logic
+    
+    def _delete_layout(self, layout):
+        while (item := layout.takeAt(0)) is not None:
+            if item.widget():
+                item.widget().deleteLater()
+            elif item.layout():
+                self._delete_layout(item.layout())
+

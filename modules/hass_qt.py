@@ -16,6 +16,7 @@ import theme
 class HASSApp(QtWidgets.QApplication):
     def __init__(self, resolution: tuple[int] = (800,480)):
         QtWidgets.QApplication.__init__(self)
+        self.kiosk_controller = KioskController()
 
         #apply the global qss to self (and all children of application)
         style_file = QtCore.QFile(theme.global_qss)
@@ -53,16 +54,17 @@ class HASSApp(QtWidgets.QApplication):
              'widget': ChannelSpinner(self.data_manager, font_scale=3)},
             {'label': "Map",
              'widget': Viewer(self.data_manager,
+                              self.kiosk_controller,
                               view_options = {
-                                  "map": lambda: MapView(self.data_manager),
-                                  "astronomy": lambda: AstronomyView(self.data_manager),
-                                  "weather: precipitation": lambda: WeatherView(self.data_manager, 'precipitation'),
-                                  "weather: temperature": lambda: WeatherView(self.data_manager, 'temperature'),
-                                  "weather: cloud": lambda: WeatherView(self.data_manager, 'cloud'),
-                                  "strava": lambda: StravaView(self.data_manager)
+                                  "map": lambda parent: MapView(self.data_manager, parent),
+                                  "astronomy": lambda parent: AstronomyView(self.data_manager, self.kiosk_controller, parent),
+                                  "weather: precipitation": lambda parent: WeatherView(self.data_manager, 'precipitation', parent),
+                                  "weather: temperature": lambda parent: WeatherView(self.data_manager, 'temperature', parent),
+                                  "weather: cloud": lambda parent: WeatherView(self.data_manager, 'cloud', parent),
+                                  "strava": lambda parent: StravaView(self.data_manager, self.kiosk_controller, parent)
                                   },
                                   infobox_options = {
-                                      #"strava": lambda runtime_data: StravaInfoBox(runtime_data)
+                                    "strava": lambda parent: StravaInfoBox(self.data_manager, self.kiosk_controller, parent)
                                   }
                                   )},
             {'label': "Terminal",
@@ -105,8 +107,8 @@ class HASSApp(QtWidgets.QApplication):
     # these are mostly here for debug. can be removed/deactivated and run silently in widgets
     def on_entities_updated(self, entities):
         # Update all widgets with new entities dict
-        print("routine fetch, " + str(len(entities)) + " entities refreshed")
+        print(f"Scheduled data refresh, {str(len(entities))} entities found")
 
     def on_entity_state_changed(self, entity):
         # Update only the widget(s) for this entity
-        print(entity['entity_id'] + " {state: " + entity['state'] +"}")
+        print(f"Heard data update, {entity['entity_id']} [state: {entity['state']}]")

@@ -10,8 +10,8 @@ from matplotlib.offsetbox import OffsetImage, AnnotationBbox
 import math
 
 class AstronomyView(View):
-    def __init__(self, data_manager: HASSDataManager):
-        super().__init__(data_manager)
+    def __init__(self, data_manager: HASSDataManager, kiosk_controller: KioskController, parent=None):
+        super().__init__(data_manager, kiosk_controller, parent)
         self.map_focus = "all"
         self.people = {}
         self.people_filtered = {}
@@ -34,7 +34,6 @@ class AstronomyView(View):
 
     def set_data(self, entities):
         self.people = {id: e for id, e in entities.items() if 'person' in id}
-        
         super().set_data(entities) # triggers render() + data_ready
     
     def prepare_data(self):

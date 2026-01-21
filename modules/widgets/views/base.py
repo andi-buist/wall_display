@@ -14,23 +14,22 @@ import networkx as nx
 from modules.widgets.widget_core import *
 from modules.caching import *
 from modules.api.get_data import *
+from modules.widgets.kiosk import *
 
 class View(QtWidgets.QWidget):
-    data_ready = QtCore.Signal(dict)
-    def __init__(self, data_manager: HASSDataManager):
-        super().__init__()
+    def __init__(self, data_manager: HASSDataManager, kiosk_controller: KioskController = None, parent=None):
+        super().__init__(parent)
         self.data_manager = data_manager
         self.latest_entity_data = {}
 
+        if kiosk_controller:
+            self.kiosk_index = 0
+            kiosk_controller.tick.connect(self.on_kiosk_timer_next)
+
+            self.kiosk_controller = kiosk_controller
+
         data_manager.entities_updated.connect(self.set_data)
         data_manager.entity_state_changed.connect(self.update_single)
-
-        self.kiosk_index = 0
-
-        self.kiosk_timer = QtCore.QTimer()
-        self.kiosk_timer.setInterval(10000)
-        self.kiosk_timer.timeout.connect(self.on_kiosk_timer_next)
-        self.kiosk_timer.start()
 
         QtCore.QTimer.singleShot(0, self._apply_initial_data_snapshot)
     
@@ -45,25 +44,13 @@ class View(QtWidgets.QWidget):
     def set_data(self, entities):
         self.latest_entity_data = entities
         self.render()
-        self.data_ready.emit(entities) # to transmit to infobox
 
     def update_single(self, entity):
         self.latest_entity_data[entity['entity_id']] = entity
         self.render()
-    
-    # when kiosk timer triggers, tick index up, update map
-    def on_kiosk_timer_next(self):
-        self.kiosk_index += 1
-        self.render()
-
-    def render(self):
-        """Override in subclasses"""
-        print(f"{self} is still using the base.py render() function. Are you sure your subclass is set up correctly?")
-        pass
 
     def kiosk_select_data(self, data: dict, start_unselected: bool = True) -> dict:
         if len(data['data']) > 0:
-            # reset kiosk index if past final set
             match start_unselected:
                 case True: kiosk_start_point = 1
                 case False: kiosk_start_point = 0
@@ -76,6 +63,16 @@ class View(QtWidgets.QWidget):
                 data["kiosk_selected"] = list(data['data'].keys())[self.kiosk_index - kiosk_start_point]
         
         return data
+    
+    # when kiosk timer triggers, tick index up, update map
+    def on_kiosk_timer_next(self, index: int):
+        self.kiosk_index = index
+        self.render()
+
+    def render(self):
+        """Override in subclasses"""
+        print(f"{self} is still using the base.py render() function. Are you sure your subclass is set up correctly?")
+        pass
     
 def plt_make(extent: tuple[float,float,float,float] = None):
     fig, ax = plt.subplots(figsize = (8,8))

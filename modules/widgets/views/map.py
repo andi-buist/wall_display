@@ -8,8 +8,8 @@ import matplotlib.pyplot as plt
 from adjustText import adjust_text
 
 class MapView(View):
-    def __init__(self, data_manager: HASSDataManager):
-        super().__init__(data_manager)
+    def __init__(self, data_manager: HASSDataManager, parent=None):
+        super().__init__(data_manager, parent = parent)
         self.map_focus = "all"
         self.people = {}
         self.people_filtered = {}
