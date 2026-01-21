@@ -129,8 +129,14 @@ class WeatherView(View):
         quantization_bin = 32
         arr = (arr // quantization_bin) * quantization_bin
 
+        # invert if precip, temp, else we want to keep clouds white
+        match self.overlay_type:
+            case "precipitation" | "temperature":
+                view = Image.fromarray(255 - arr)
+            case _:
+                view = Image.fromarray(arr)
+
         # add view to ax
-        view = Image.fromarray(255 - arr)
         view.putalpha(196)
         ax.imshow(view, extent=extent)
 

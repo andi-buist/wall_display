@@ -1,7 +1,7 @@
-__all__ = ['caching', 'widgets', 'hass_qt', 'websocket_defs']
+__all__ = ['caching', 'widgets', 'app_core', 'websocket_defs']
 
 # Import the submodules
 from . import caching
 from . import widgets
-from . import hass_qt
+from . import app_core
 from . import websocket_defs
