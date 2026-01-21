@@ -7,9 +7,14 @@ with open("tokens.json") as f:
 HASS_WS_URL = hass_config['url']
 TOKEN = hass_config['secret']
 
+# TODO: i think this could be made more generic. we should be able to define a generic DataManager
+# with subclasses for e.g. MetOfficeDataManager, StravaDataManager, etc.
+# at the moment everything is tied to HASS data, even when HASS is not listened to
+# passing an interval to _get_states_timer would be easy enough, and subclassable
+
 class DataManager(QtCore.QObject):
-    entities_updated = QtCore.Signal(dict)  # Emitted when all entities are refreshed
-    entity_state_changed = QtCore.Signal(dict)  # Emitted when a single entity changes
+    entities_updated = QtCore.Signal(dict)  # when all entities are refreshed
+    entity_state_changed = QtCore.Signal(dict)  # when a single entity changes
 
     def __init__(self, parent=None):
         super().__init__(parent)
