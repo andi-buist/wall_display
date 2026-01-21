@@ -2,11 +2,9 @@ import tkinter as tk
 from PIL import Image, ImageDraw, ImageTk
 from typing import Literal
 
-from config import *
-from .core import *
+from .widget_core import *
 from ..caching import *
-
-from .core import *
+from .widget_core import *
 
 class EntityBlueprint(EntityWidget):
     def __init__(self, master, 

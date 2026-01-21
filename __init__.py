@@ -1,5 +1,4 @@
-__all__ = ['config', 'theme']
+__all__ = ['theme']
 
 # Import the submodules
-from . import config
 from . import theme

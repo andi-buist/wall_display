@@ -1,51 +1,23 @@
-import tkinter as tk
-import tkinter.ttk as ttk
+from pathlib import Path
+
+# create a layered dictionary reflecting the directory
+def dir_to_dict(dir: Path):
+    out_dict = {}
+
+    for path in dir.rglob("*"):
+        parts = path.relative_to(dir).parts
+        place = out_dict
+
+        for part in parts[:-1]:
+            place = place.setdefault(part, {})
+        last = parts[-1]
+        if path.is_dir():
+            place.setdefault(last, {})
+        else:
+            place[last.split(".")[0]] = path
+    
+    return out_dict
 
 global_font = ('Nintendo DS BIOS', 12)
-
-def CreateStyle():
-    style = ttk.Style()
-    style.theme_use('clam')
-    style.configure('.',  font = global_font)
-    style.configure('.', fg = "#000000", bg = "#ffffff")
-    
-    style.configure('EntityWidget.TFrame',
-                    foreground = "#000000",
-                    background = "#ffffff",
-                    expand = True)
-    
-    style.configure('EntityWidget.TButton',
-                    foreground = "#000000",
-                    background = "#ffffff")
-    
-    style.configure('EntityWidget.Vertical.TScale',
-                    foreground = "#000000",
-                    troughcolor = "#555555",
-                    background = "#ffffff")
-    style.configure('EntityWidget.Horizontal.TScale',
-                    foreground = "#000000",
-                    background = "#ffffff")
-    
-    style.configure('EntityWidget.TLabel',
-                    foreground = "#000000",
-                    background = "#ffffff")
-    
-    style.configure('AppStyle.TNotebook',
-                    foreground = "#000000",
-                    background = "#ffffff",
-                    bordercolor = "#000000",
-                    tabmargins = [0,0,0,0])
-    style.configure('AppStyle.TNotebook.Tab',
-                    bordercolor = "#000000")
-    style.map('AppStyle.TNotebook.Tab',
-              foreground=[("selected", "#ffffff"),("", "#000000")],
-              background=[("selected", "#000000"),("", "#ffffff")])
-
-    style.configure('ContextFrame.TNotebook',
-                    foreground = "#000000",
-                    background = "#ffffff",
-                    bordercolor = "#ffffff",
-                    relief = 'flat')
-    style.layout('ContextFrame.TNotebook.Tab', [])
-
-    return style
+global_qss = Path('stylesheet.qss')
+filestore = dir_to_dict(Path("theme"))
