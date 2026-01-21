@@ -4,6 +4,7 @@ from PySide6 import QtWidgets
 from io import BytesIO
 from PIL import Image
 import matplotlib.pyplot as plt
+from matplotlib.offsetbox import OffsetImage, AnnotationBbox
 
 class StravaView(View):
     def __init__(self, data_manager: HASSDataManager, kiosk_controller: KioskController, parent=None):
@@ -108,6 +109,12 @@ def plt_add_strava_view(ax: plt.Axes, data: dict) -> None:
                 linewidth = 5,
                 linestyle = 'solid',
                 zorder = 1)
+
+        flag_icon_image = OffsetImage(plt.imread(theme.filestore['ui']['icons']['misc']['checkered_flag']), zoom = 2, interpolation = 'nearest')
+        flag_marker = AnnotationBbox(flag_icon_image, (data['polyline'][-1][0], data['polyline'][-1][1]), frameon = False, annotation_clip = True, box_alignment=(1,0))
+        flag_marker.set_clip_on(True)
+        ax.add_artist(flag_marker)
+        
     else:
         # no activity data to plot, show placeholder
         legend_text = "No recent activity... \nCheck back later!"

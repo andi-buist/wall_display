@@ -45,6 +45,7 @@ class StravaInfoBox(InfoBox):
         self.clear()
 
         self.add_kcal(kiosk_data['calories'])
+        self.add_heartrate(kiosk_data['average_heartrate'])
 
         for achievement in kiosk_data['achievements'].values():
             for a in achievement['achievements']:
@@ -53,7 +54,7 @@ class StravaInfoBox(InfoBox):
     def add_kcal(self, kcals: int|float):
         kcal_title_bar = QtWidgets.QLabel("Calories:")
         kcal_title_bar.setStyleSheet("font-weight: bold")
-        kcal_title_bar.setAlignment(QtCore.Qt.AlignmentFlag.AlignCenter)
+        kcal_title_bar.setAlignment(QtCore.Qt.AlignmentFlag.AlignLeft | QtCore.Qt.AlignmentFlag.AlignVCenter)
         self.layout.addWidget(kcal_title_bar)
 
         hbox = QtWidgets.QHBoxLayout()
@@ -68,13 +69,31 @@ class StravaInfoBox(InfoBox):
         hbox.addWidget(icon) 
         hbox.addWidget(label)
         self.layout.addLayout(hbox)
+    
+    def add_heartrate(self, heartrate: int|float):
+        hr_title_bar = QtWidgets.QLabel("Heart Rate:")
+        hr_title_bar.setStyleSheet("font-weight: bold")
+        hr_title_bar.setAlignment(QtCore.Qt.AlignmentFlag.AlignLeft | QtCore.Qt.AlignmentFlag.AlignVCenter)
+        self.layout.addWidget(hr_title_bar)
 
+        hbox = QtWidgets.QHBoxLayout()
+        hbox.setAlignment(QtCore.Qt.AlignmentFlag.AlignLeft)
+
+        icon = QtWidgets.QLabel(pixmap = QtGui.QPixmap.fromImage(ImageQt.ImageQt(theme.filestore['ui']['icons']['misc']['heart'])))
+        icon.setSizePolicy(QtWidgets.QSizePolicy.Policy.Minimum, QtWidgets.QSizePolicy.Policy.Minimum)
+        label = QtWidgets.QLabel(f"{heartrate}")
+        label.setSizePolicy(QtWidgets.QSizePolicy.Policy.Expanding, QtWidgets.QSizePolicy.Policy.Minimum)
+        label.setAlignment(QtCore.Qt.AlignmentFlag.AlignLeft | QtCore.Qt.AlignmentFlag.AlignVCenter)
+
+        hbox.addWidget(icon) 
+        hbox.addWidget(label)
+        self.layout.addLayout(hbox)
 
     def add_achievement(self, text: str = None, rank: Literal[1,2,3] = 1):
         if self.achievement_count == 0:
             self.achievement_title_bar = QtWidgets.QLabel("No achievements")
             self.achievement_title_bar.setStyleSheet("font-weight: bold")
-            self.achievement_title_bar.setAlignment(QtCore.Qt.AlignmentFlag.AlignCenter)
+            self.achievement_title_bar.setAlignment(QtCore.Qt.AlignmentFlag.AlignLeft | QtCore.Qt.AlignmentFlag.AlignVCenter)
             self.layout.addWidget(self.achievement_title_bar)
 
         self.achievement_count += 1

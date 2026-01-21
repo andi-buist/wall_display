@@ -27,6 +27,7 @@ from stravalib.model import DetailedActivity
 from pathlib import Path
 import polyline
 import contextlib
+import sys
 
 with open("tokens.json") as f: 
     token_config = json.load(f)
@@ -154,6 +155,7 @@ def get_strava_data(period: tuple[datetime.datetime, datetime.datetime] = (datet
             activity_dict["start_point"] = tuple(reversed(detailed_activity.start_latlng.root))
             activity_dict["end_point"] = tuple(reversed(detailed_activity.end_latlng.root))
             activity_dict["calories"] = detailed_activity.calories
+            activity_dict["average_heartrate"] = detailed_activity.average_heartrate
             activity_dict["achievements"] = {}
             for effort in detailed_activity.segment_efforts:
                 achievements: list[dict] = []
