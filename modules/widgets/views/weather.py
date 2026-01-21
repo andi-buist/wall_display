@@ -35,7 +35,7 @@ class WeatherView(View):
         
         super().set_data(entities) # triggers render() + data_ready
     
-    def prepare_data(self):
+    def get_latest_data(self):
         # Compute params
         plot_params = calculate_plot_params([(p['attributes']['longitude'], p['attributes']['latitude']) for p in self.people.values()], extent_dimension = 2.25)
         
@@ -47,15 +47,15 @@ class WeatherView(View):
         # Determine label size
         self.label_size = int(min(self.view_label.width(), self.view_label.height()))
 
-        prepared = self.prepare_data()
+        latest_data = self.get_latest_data()
 
         # If no data yet, show placeholder
-        if not prepared["plot_params"]:
+        if not latest_data["plot_params"]:
             self.view_label.setText("Loading...")
             return
         
         try: 
-            image = self.render_visuals(prepared)
+            image = self.render_visuals(latest_data)
             pixmap = image_to_formatted_pixmap(image, self.label_size)
             self.view_label.setPixmap(pixmap)
             self.view_label_info.clear()
@@ -65,7 +65,7 @@ class WeatherView(View):
             self.view_label.setPixmap(pixmap)
             self.view_label_info.setText(str(e))
 
-    def render_visuals(self, prepared_data: dict) -> Image.Image:
+    def render_visuals(self, latest_data: dict) -> Image.Image:
         # map plot setup ----
         plt.rcParams['font.family'] = "Nintendo DS BIOS"
 
@@ -74,7 +74,7 @@ class WeatherView(View):
         if len(self.people) == 0: # loading
             return None
         
-        plot_params = prepared_data['plot_params']
+        plot_params = latest_data['plot_params']
         map_bg = get_map_image(self.label_size, plot_params['extent'], plot_params['dimension'], plot_params['min_dimension'], 128, 1)
 
         fig, ax = plt_make(plot_params['extent'])

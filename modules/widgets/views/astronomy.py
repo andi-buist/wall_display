@@ -36,7 +36,7 @@ class AstronomyView(View):
         self.people = {id: e for id, e in entities.items() if 'person' in id}
         super().set_data(entities) # triggers render() + data_ready
     
-    def prepare_data(self):
+    def get_latest_data(self):
         # Determine focus
         if self.map_focus == "all":
             self.people_filtered = self.people
@@ -78,15 +78,15 @@ class AstronomyView(View):
         # Determine label size
         self.label_size = int(min(self.view_label.width(), self.view_label.height()))
 
-        prepared = self.prepare_data()
+        latest_data = self.get_latest_data()
 
         # If no data yet, show placeholder
-        if not prepared["plot_params"]:
+        if not latest_data["plot_params"]:
             self.view_label.setText("Loading...")
             return
         
         try: 
-            image = self.render_visuals(prepared)
+            image = self.render_visuals(latest_data)
             pixmap = image_to_formatted_pixmap(image, self.label_size)
             self.view_label.setPixmap(pixmap)
             self.view_label_info.clear()
@@ -96,12 +96,12 @@ class AstronomyView(View):
             self.view_label.setPixmap(pixmap)
             self.view_label_info.setText(str(e))
 
-    def render_visuals(self, prepared_data: dict) -> Image.Image:
+    def render_visuals(self, latest_data: dict) -> Image.Image:
         # map plot setup ----
         plt.rcParams['font.family'] = "Nintendo DS BIOS"
         
-        plot_params = prepared_data['plot_params']
-        data = prepared_data['data']
+        plot_params = latest_data['plot_params']
+        data = latest_data['data']
 
         fig, ax = plt_make(plot_params['extent'])
         self.plt_add_astronomy(data, ax, plot_params) # +map buffer would have circle perfectly fit square, but we want some allowance for icons

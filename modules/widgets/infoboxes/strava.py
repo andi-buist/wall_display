@@ -18,7 +18,7 @@ class StravaInfoBox(InfoBox):
 
         self.achievement_count: int = 0
     
-    def prepare_data(self):
+    def get_latest_data(self):
         data = get_strava_map_data(period = (datetime.datetime.today() - datetime.timedelta(days=30), datetime.datetime.now()))
         data = self.kiosk_select_data(data, start_unselected=False)
 
@@ -30,19 +30,14 @@ class StravaInfoBox(InfoBox):
         }
     
     def update_ui(self):
-        prepared = self.prepare_data()
-
-        if not prepared["plot_params"]:
-            self.view_label.setText("Loading...")
-            return
-
-        self.build_ui(prepared)
+        latest_data = self.get_latest_data()
+        self.build_ui(latest_data)
     
-    def build_ui(self, prepared_data: dict):
-        data = prepared_data['data']
-        kiosk_data = data['data'][data['kiosk_selected']]
-
+    def build_ui(self, latest_data: dict):
         self.clear()
+
+        data = latest_data['data']
+        kiosk_data = data['data'][data['kiosk_selected']]
 
         self.add_kcal(kiosk_data['calories'])
         self.add_heartrate(kiosk_data['average_heartrate'])

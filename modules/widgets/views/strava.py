@@ -26,7 +26,7 @@ class StravaView(View):
     def set_data(self, entities): # in Views like strava, this is sort of overkill since no data is extracted, but it's an available timer
         super().set_data(entities)
 
-    def prepare_data(self):
+    def get_latest_data(self):
         data = get_strava_map_data(period = (datetime.datetime.today() - datetime.timedelta(days=30), datetime.datetime.now()))
         data = self.kiosk_select_data(data, start_unselected=False)
 
@@ -41,19 +41,19 @@ class StravaView(View):
         # Determine label size
         self.label_size = int(min(self.view_label.width(), self.view_label.height()))
 
-        prepared = self.prepare_data()
+        latest_data = self.get_latest_data()
 
         # If no data yet, show placeholder
-        if not prepared["plot_params"]:
+        if not latest_data["plot_params"]:
             self.view_label.setText("Loading...")
             return
         
         try: 
-            image = self.render_visuals(prepared)
+            image = self.render_visuals(latest_data)
             pixmap = image_to_formatted_pixmap(image, self.label_size)
             self.view_label.setPixmap(pixmap)
             
-            kiosk_data = prepared['data']['data'][prepared['data']['kiosk_selected']]
+            kiosk_data = latest_data['data']['data'][latest_data['data']['kiosk_selected']]
             time_str = kiosk_data['start_date'].strftime('%A %d %b, %H:%M')
             run_length = str(round(kiosk_data['distance']/1000,1)) + "k"
             self.view_label_info.setText(f"{time_str}: {run_length}")
@@ -63,16 +63,16 @@ class StravaView(View):
             self.view_label.setPixmap(pixmap)
             self.view_label_info.setText(str(e))
 
-    def render_visuals(self, prepared_data: dict) -> Image.Image:
+    def render_visuals(self, latest_data: dict) -> Image.Image:
         # map plot setup ----
         plt.rcParams['font.family'] = "Nintendo DS BIOS"
 
         self.label_size = int(min(self.view_label.width(), self.view_label.height()))
         
-        data = prepared_data['data']
+        data = latest_data['data']
         kiosk_data = data['data'][data['kiosk_selected']]
 
-        plot_params = prepared_data['plot_params']
+        plot_params = latest_data['plot_params']
 
         map_bg =  get_map_image(self.label_size, plot_params['extent'], plot_params['dimension'], plot_params['min_dimension'], 128, 1)
 

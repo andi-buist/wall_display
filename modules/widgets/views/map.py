@@ -41,7 +41,7 @@ class MapView(View):
         
         super().set_data(entities) # triggers render() + data_ready
     
-    def prepare_data(self):
+    def get_latest_data(self):
         # Determine focus
         if self.map_focus == "all":
             self.people_filtered = self.people
@@ -51,13 +51,15 @@ class MapView(View):
         # If no people yet, return empty structure 
         if not self.people_filtered: 
             return {"plot_params": None, "data": {}}
-        
-        # Compute params
-        coords = [(p['attributes']['longitude'], p['attributes']['latitude']) for p in self.people_filtered.values()]
-        plot_params = calculate_plot_params(coords)
-        
-        # External astronomy data
+
         self.people_movement_data = get_people_movement_data(self.people_filtered)
+
+        # Compute params
+        coords: list[tuple] = []
+        for entity in self.people_filtered.values():
+            coords.extend(self.people_movement_data[entity['entity_id']].values())
+
+        plot_params = calculate_plot_params(coords)
         
         return {
             "plot_params": plot_params
@@ -81,15 +83,15 @@ class MapView(View):
         # Determine label size
         self.label_size = int(min(self.view_label.width(), self.view_label.height()))
 
-        prepared = self.prepare_data()
+        latest_data = self.get_latest_data()
 
         # If no data yet, show placeholder
-        if not prepared["plot_params"]:
+        if not latest_data["plot_params"]:
             self.view_label.setText("Loading...")
             return
         
         try: 
-            image = self.render_visuals(prepared)
+            image = self.render_visuals(latest_data)
             pixmap = image_to_formatted_pixmap(image, self.label_size)
             self.view_label.setPixmap(pixmap)
             self.view_label_info.clear()
@@ -99,7 +101,7 @@ class MapView(View):
             self.view_label.setPixmap(pixmap)
             self.view_label_info.setText(str(e))
 
-    def render_visuals(self, prepared_data: dict) -> Image.Image:
+    def render_visuals(self, latest_data: dict) -> Image.Image:
         # map plot setup ----
         plt.rcParams['font.family'] = "Nintendo DS BIOS"
         
@@ -108,7 +110,7 @@ class MapView(View):
         if len(self.zones) == 0 and len(self.people) == 0: # loading
             return None
         
-        plot_params = prepared_data['plot_params']
+        plot_params = latest_data['plot_params']
 
         fig, ax = plt_make(plot_params['extent'])
         

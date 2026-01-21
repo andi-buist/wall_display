@@ -68,6 +68,11 @@ class View(QtWidgets.QWidget):
     def on_kiosk_timer_next(self, index: int):
         self.kiosk_index = index
         self.render()
+    
+    def get_latest_data(self):
+        """Override in subclasses"""
+        print(f"{self} is still using the base.py get_latest_data() function. Are you sure your subclass is set up correctly?")
+        pass
 
     def render(self):
         """Override in subclasses"""
