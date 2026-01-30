@@ -207,8 +207,9 @@ def get_people_movement_data(people: dict) -> dict:
     data = {}
     for entity_id, entity in people.items():
         #get position history if present, else make, trim to most recent N and append current
-        position_history = localcache_read("./data/person_position_log.json", entity_id)
+        position_history = localcache_read("data/person_position_log.json", entity_id)
         _current_position = [entity['attributes']['longitude'], entity['attributes']['latitude']]
+        _time_now = dateutil.parser.parse(entity['last_updated']).timestamp()
 
         if len(position_history) > 0:
             _latest_parsed_datetime = max(position_history.keys())
@@ -217,10 +218,14 @@ def get_people_movement_data(people: dict) -> dict:
             _latest_position = None
 
         if len(position_history) == 0 or _current_position != _latest_position:
-            localcache_write("./data/person_position_log.json",
+            localcache_write("data/person_position_log.json",
                                 entity_id,
-                                dateutil.parser.parse(entity['last_updated']).timestamp(),
+                                _time_now,
                                 _current_position,
                                 12) # assign back
-        data[entity_id] = position_history
+        
+        if len(position_history) == 0:
+            data[entity_id] = {_time_now: _current_position}
+        else:
+            data[entity_id] = position_history
     return data
