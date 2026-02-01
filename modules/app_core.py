@@ -51,7 +51,7 @@ class HomeApp(QtWidgets.QApplication):
                                           "light.floor_lamp", 
                                           HASSEntityButton.light_switch)},
             {'label': "Spinner",
-             'widget': ValueSpinner(self.data_manager, 'vertical', font_scale = 5)},
+             'widget': RGBSPinner(self.data_manager, 'vertical')},
             {'label': "Map",
              'widget': Viewer(self.data_manager,
                               self.kiosk_controller,

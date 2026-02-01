@@ -114,13 +114,13 @@ class HASSEntityRGBSpinner(HASSWidget):
             distances[name] = rd + gd + bd
         return min(distances, key=distances.get)
 """
-class ValueSpinner(HASSWidget):
+class ValueSpinner(QtWidgets.QWidget):
     """
     A widget containing two buttons, used to increment an internal value, and a display panel used to represent the internal value.
     Contains a signal, value_changed, that can be latched to on internal value change.
     """
     value_changed = QtCore.Signal(int)
-    def __init__(self, data_manager, orientation: Literal["vertical", "horizontal"] = "vertical", bits: int = 8, font_scale: float = None, parent=None):
+    def __init__(self, orientation: Literal["vertical", "horizontal"] = "vertical", bits: int = 8, parent=None):
         """
         Create a new ValueSpinner
 
@@ -129,20 +129,17 @@ class ValueSpinner(HASSWidget):
         :type orientation: Literal["vertical", "horizontal"]
         :param bits: Values 0 -> n-1 the spinner can represent
         :type bits: int
-        :param font_scale: Scale of the value text, proportional to the spinner. If none, no value is displayed.
-        :type font_scale: float
         """
-        super().__init__(data_manager, parent=parent)
+        super().__init__(parent=parent)
         self.value = 0
         self.bits = bits
         self.label_min_size = 32
-        self.font_scale = font_scale
         self.orientation = orientation
 
         self.value_label = QtWidgets.QLabel(alignment=QtCore.Qt.AlignmentFlag.AlignCenter)
         self.value_label.setSizePolicy(QtWidgets.QSizePolicy.Policy.Expanding, QtWidgets.QSizePolicy.Policy.Expanding)
         self.value_label.setMinimumSize(self.label_min_size,self.label_min_size)
-        self.value_label.setStyleSheet(f"background: #fff; border: 1px solid #000; font-size: {self.get_font_size()}pt")
+        self.value_label.setStyleSheet(f"background: #fff; border: 1px solid #000")
 
         self.pos_button = QtWidgets.QPushButton()
         self.pos_button.clicked.connect(lambda: self.increment_channel(1))
@@ -189,18 +186,27 @@ class ValueSpinner(HASSWidget):
         dither_qimg = QtGui.QImage.fromData(dither_image_data.getvalue())
         self.value_label.setPixmap(QtGui.QPixmap.fromImage(dither_qimg))
 
-        if _fraction > 0.5:
-            self.value_label.setStyleSheet(f"border: 1px solid #000; font-size: {self.get_font_size()}pt; color: #fff")
-        else:
-            self.value_label.setStyleSheet(f"border: 1px solid #000; font-size: {self.get_font_size()}pt; color: #000")
-        
-        if self.font_scale:
-            self.value_label.setText(str(self.value))
-        
         self.value_changed.emit(self.value)
 
-    def get_font_size(self):
-        if self.font_scale:
-            return max(int((min(self.value_label.size().width(), self.value_label.size().height())/self.label_min_size) * self.font_scale),1)
-        else:
-            return 1
+class RGBSPinner(HASSWidget):
+    """
+    A HASSWidet used to control an entity with RGB values (lights, bulbs)
+    """
+    def __init__(self, data_manager: DataManager, orientation: Literal["vertical", "horizontal"] = "vertical", bits: int = 8,  parent = None):
+        super().__init__(data_manager)
+
+        match orientation:
+            case 'horizontal':
+                layout = QtWidgets.QHBoxLayout(self)
+                self.R_spinner = ValueSpinner(orientation = 'vertical', bits = bits)
+                self.G_spinner = ValueSpinner(orientation = 'vertical', bits = bits)
+                self.B_spinner = ValueSpinner(orientation = 'vertical', bits = bits)
+            case 'vertical':
+                layout = QtWidgets.QVBoxLayout(self)
+                self.R_spinner = ValueSpinner(orientation = 'horizontal', bits = bits)
+                self.G_spinner = ValueSpinner(orientation = 'horizontal', bits = bits)
+                self.B_spinner = ValueSpinner(orientation = 'horizontal', bits = bits)
+
+        layout.addWidget(self.R_spinner)
+        layout.addWidget(self.G_spinner)
+        layout.addWidget(self.B_spinner)
