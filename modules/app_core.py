@@ -9,7 +9,7 @@ from modules.widgets.views.map import *
 from modules.widgets.views.weather import *
 from modules.widgets.views.strava import *
 from modules.widgets.infoboxes.strava import *
-from modules.widgets.rgb_spinner import *
+from modules.widgets.spinners import *
 from modules.widgets.terminal import *
 import theme
 
@@ -51,7 +51,7 @@ class HomeApp(QtWidgets.QApplication):
                                           "light.floor_lamp", 
                                           HASSEntityButton.light_switch)},
             {'label': "Spinner",
-             'widget': ChannelSpinner(self.data_manager, font_scale=3)},
+             'widget': ValueSpinner(self.data_manager, 'vertical', font_scale = 5)},
             {'label': "Map",
              'widget': Viewer(self.data_manager,
                               self.kiosk_controller,

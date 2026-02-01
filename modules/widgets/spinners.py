@@ -1,6 +1,8 @@
 from PySide6 import QtCore, QtWidgets, QtGui
+from typing import Literal
 import requests
 from io import BytesIO
+from PIL import Image
 import webcolors
 
 from .widget_core import *
@@ -112,30 +114,64 @@ class HASSEntityRGBSpinner(HASSWidget):
             distances[name] = rd + gd + bd
         return min(distances, key=distances.get)
 """
-class ChannelSpinner(HASSWidget):
-    def __init__(self, data_manager, entity_id=None, bits: int = 8, font_scale: float = None, parent=None):
-        super().__init__(data_manager, entity_ids=entity_id, parent=parent)
+class ValueSpinner(HASSWidget):
+    """
+    A widget containing two buttons, used to increment an internal value, and a display panel used to represent the internal value.
+    Contains a signal, value_changed, that can be latched to on internal value change.
+    """
+    value_changed = QtCore.Signal(int)
+    def __init__(self, data_manager, orientation: Literal["vertical", "horizontal"] = "vertical", bits: int = 8, font_scale: float = None, parent=None):
+        """
+        Create a new ValueSpinner
+
+        :param data_manager: The app's DataManager
+        :param orientation: Orientation of the spinner
+        :type orientation: Literal["vertical", "horizontal"]
+        :param bits: Values 0 -> n-1 the spinner can represent
+        :type bits: int
+        :param font_scale: Scale of the value text, proportional to the spinner. If none, no value is displayed.
+        :type font_scale: float
+        """
+        super().__init__(data_manager, parent=parent)
         self.value = 0
         self.bits = bits
         self.label_min_size = 32
         self.font_scale = font_scale
-
-        layout = QtWidgets.QVBoxLayout(self)
-
-        self.up_button = QtWidgets.QPushButton()
-        self.up_button.setIcon(QtGui.QPixmap(theme.filestore['ui']['icons']['general']['arrow_up']))
-        self.up_button.clicked.connect(lambda: self.increment_channel(1))
-        self.down_button = QtWidgets.QPushButton()
-        self.down_button.setIcon(QtGui.QPixmap(theme.filestore['ui']['icons']['general']['arrow_down']))
-        self.down_button.clicked.connect(lambda: self.increment_channel(-1))
+        self.orientation = orientation
 
         self.value_label = QtWidgets.QLabel(alignment=QtCore.Qt.AlignmentFlag.AlignCenter)
+        self.value_label.setSizePolicy(QtWidgets.QSizePolicy.Policy.Expanding, QtWidgets.QSizePolicy.Policy.Expanding)
         self.value_label.setMinimumSize(self.label_min_size,self.label_min_size)
         self.value_label.setStyleSheet(f"background: #fff; border: 1px solid #000; font-size: {self.get_font_size()}pt")
 
-        layout.addWidget(self.up_button)
-        layout.addWidget(self.value_label)
-        layout.addWidget(self.down_button)
+        self.pos_button = QtWidgets.QPushButton()
+        self.pos_button.clicked.connect(lambda: self.increment_channel(1))
+        self.neg_button = QtWidgets.QPushButton()
+        self.neg_button.clicked.connect(lambda: self.increment_channel(-1))
+
+        match self.orientation:
+            case "horizontal":
+                layout = QtWidgets.QHBoxLayout(self)
+                self.pos_button.setIcon(QtGui.QPixmap(theme.filestore['ui']['icons']['general']['arrow_right']))
+                self.neg_button.setIcon(QtGui.QPixmap(theme.filestore['ui']['icons']['general']['arrow_left']))
+
+                self.pos_button.setSizePolicy(QtWidgets.QSizePolicy.Policy.Minimum, QtWidgets.QSizePolicy.Policy.Expanding)
+                self.neg_button.setSizePolicy(QtWidgets.QSizePolicy.Policy.Minimum, QtWidgets.QSizePolicy.Policy.Expanding)
+
+                layout.addWidget(self.neg_button)
+                layout.addWidget(self.value_label)
+                layout.addWidget(self.pos_button)
+            case "vertical":
+                layout = QtWidgets.QVBoxLayout(self)
+                self.pos_button.setIcon(QtGui.QPixmap(theme.filestore['ui']['icons']['general']['arrow_up']))
+                self.neg_button.setIcon(QtGui.QPixmap(theme.filestore['ui']['icons']['general']['arrow_down']))
+
+                self.pos_button.setSizePolicy(QtWidgets.QSizePolicy.Policy.Expanding, QtWidgets.QSizePolicy.Policy.Minimum)
+                self.neg_button.setSizePolicy(QtWidgets.QSizePolicy.Policy.Expanding, QtWidgets.QSizePolicy.Policy.Minimum)
+
+                layout.addWidget(self.pos_button)
+                layout.addWidget(self.value_label)
+                layout.addWidget(self.neg_button)
 
         self.increment_channel(-1)
         
@@ -145,15 +181,24 @@ class ChannelSpinner(HASSWidget):
         _channel_strength = 255 - round(255 * _fraction)
         _hex_code = '#%02x%02x%02x' % (_channel_strength, _channel_strength, _channel_strength)
 
+        dither_image = Image.new('RGB', (self.value_label.width(), self.value_label.height()), _hex_code)
+        dither_image = dither_image.convert('1')
+
+        dither_image_data = BytesIO()
+        dither_image.save(dither_image_data, format="PNG")
+        dither_qimg = QtGui.QImage.fromData(dither_image_data.getvalue())
+        self.value_label.setPixmap(QtGui.QPixmap.fromImage(dither_qimg))
+
         if _fraction > 0.5:
-            self.value_label.setStyleSheet(f"background: {_hex_code}; border: 1px solid #000; font-size: {self.get_font_size()}pt; color: #fff")
+            self.value_label.setStyleSheet(f"border: 1px solid #000; font-size: {self.get_font_size()}pt; color: #fff")
         else:
-            self.value_label.setStyleSheet(f"background: {_hex_code}; border: 1px solid #000; font-size: {self.get_font_size()}pt; color: #000")
+            self.value_label.setStyleSheet(f"border: 1px solid #000; font-size: {self.get_font_size()}pt; color: #000")
         
         if self.font_scale:
             self.value_label.setText(str(self.value))
+        
+        self.value_changed.emit(self.value)
 
-    
     def get_font_size(self):
         if self.font_scale:
             return max(int((min(self.value_label.size().width(), self.value_label.size().height())/self.label_min_size) * self.font_scale),1)
