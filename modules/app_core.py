@@ -42,16 +42,21 @@ class HomeApp(QtWidgets.QApplication):
         self.data_manager.entities_updated.connect(self.on_entities_updated)
         self.data_manager.entity_state_changed.connect(self.on_entity_state_changed)
 
+        # TODO: remove
+        slider_test = QtWidgets.QWidget()
+        slider_test_layout = QtWidgets.QHBoxLayout(slider_test)
+        slider_test_layout.addWidget(RGBSpinner(self.data_manager,'light.bedside_lamp', 'vertical'))
+        slider_test_layout.addWidget(VSpinner(self.data_manager,'light.bedside_lamp', 'horizontal'))
+
         # widgets
         self.widget_store = [
             {'label': "Calendar",
              'widget': QtWidgets.QCalendarWidget()},
             {'label': "Light Switch",
              'widget': HASSEntityButton(self.data_manager, 
-                                          "light.floor_lamp", 
-                                          HASSEntityButton.light_switch)},
+                                          "light.floor_lamp")},
             {'label': "Spinner",
-             'widget': RGBSPinner(self.data_manager, 'vertical')},
+             'widget': slider_test},
             {'label': "Map",
              'widget': Viewer(self.data_manager,
                               self.kiosk_controller,

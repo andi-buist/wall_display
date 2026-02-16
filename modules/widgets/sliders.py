@@ -1,6 +1,8 @@
+from PySide6 import QtCore, QtWidgets, QtGui
+from typing import Literal
+from PIL import Image
+
 from .widget_core import *
-from ..caching import *
-from ..websocket_defs import ThreadedWebsocket
 
 class EntitySlider(EntityWidget):
     def __init__(self, master, local_ws: ThreadedWebsocket,

@@ -5,6 +5,9 @@ class HASSEntityButton(HASSWidget):
     def __init__(self, data_manager, entity_id: str=None, command: callable=None, parent=None): #
         super().__init__(data_manager, entity_ids=entity_id, parent=parent)
 
+        if not command:
+            command = HASSEntityButton.light_switch
+
         self.button = QPushButton(self)
         self.button.clicked.connect(lambda: command(self, entity_id))
         # Layout setup, etc.
