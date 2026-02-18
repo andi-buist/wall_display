@@ -21,11 +21,7 @@ class InfoBox(QtWidgets.QWidget):
         data_manager.data_update.connect(self._on_data_update)
         data_manager.data_event.connect(self._on_data_event)
 
-        QtCore.QTimer.singleShot(0, self._apply_initial_data_snapshot)
-    
-    def _apply_initial_data_snapshot(self): 
-        if self.data_manager.data: 
-            self._on_data_update(self.data_manager.data)
+        QtCore.QTimer.singleShot(0, self._on_data_update)
 
     def _on_data_update(self):
         self.update_ui()
