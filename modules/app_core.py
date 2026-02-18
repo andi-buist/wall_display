@@ -15,10 +15,14 @@ import theme
 
 import json
 with open("tokens.json") as f: 
-    hass_config = json.load(f)["hass_config"]
+    token_config = json.load(f)
 
-HASS_WS_URL = hass_config['url']
-HASS_WS_TOKEN = hass_config['secret']
+HASS_WS_URL = token_config['hass_config']['url']
+HASS_WS_TOKEN = token_config['hass_config']['secret']
+
+ASTRONOMY_API_USER_ID = token_config['astronomy_config']['id']
+ASTRONOMY_API_USER_SECRET = token_config['astronomy_config']['secret']
+ASTRONOMY_LON_LAT = token_config['astronomy_lon_lat']
 
 class HomeApp(QtWidgets.QApplication):
     def __init__(self, resolution: tuple[int] = (800,480)):
@@ -44,31 +48,31 @@ class HomeApp(QtWidgets.QApplication):
         self.window.setCentralWidget(central_widget)
         layout = QtWidgets.QHBoxLayout(central_widget)
 
-        # create a data manager
-        self.data_manager = HASSDataManager(HASS_WS_URL, HASS_WS_TOKEN)
-        self.data_manager.data_event.connect(self.on_entity_state_changed)
+        # Create DataManagers
+        self.hass_data_manager = HASSDataManager(HASS_WS_URL, HASS_WS_TOKEN, refresh_rate = 60000)
+        self.hass_data_manager.data_event.connect(self.on_entity_state_changed)
+        self.astro_data_manager = AstronomyDataManager(ASTRONOMY_API_USER_ID, ASTRONOMY_API_USER_SECRET, ASTRONOMY_LON_LAT, refresh_rate = 60000)
 
-        # TODO: remove
+        # TODO: worth converting to its own LightingPanel widget maybe? could have options for RGB, Temp, cute icon
         slider_test = QtWidgets.QWidget()
         slider_test_layout = QtWidgets.QHBoxLayout(slider_test)
-        slider_test_layout.addWidget(RGBSpinner(self.data_manager,'light.bedside_lamp', 'vertical'))
-        slider_test_layout.addWidget(VSpinner(self.data_manager,'light.bedside_lamp', 'horizontal'))
+        slider_test_layout.addWidget(RGBSpinner(self.hass_data_manager,'light.bedside_lamp', 'vertical'))
+        slider_test_layout.addWidget(VSpinner(self.hass_data_manager,'light.bedside_lamp', 'horizontal'))
 
         # widgets
         self.widget_store = [
             {'label': "Calendar",
              'widget': QtWidgets.QCalendarWidget()},
             {'label': "Light Switch",
-             'widget': HASSEntityButton(self.data_manager, 
+             'widget': HASSEntityButton(self.hass_data_manager, 
                                           "light.floor_lamp")},
             {'label': "Spinner",
              'widget': slider_test},
             {'label': "Map",
-             'widget': Viewer(self.data_manager,
-                              self.kiosk_controller,
+             'widget': Viewer(self.kiosk_controller,
                               view_options = {
-                                  "map": (MapView,{}),
-                                  "astronomy": (AstronomyView, {"kiosk_controller": self.kiosk_controller}),
+                                  #"map": (MapView,{}),
+                                  "astronomy": (AstronomyView, {"data_manager": self.astro_data_manager, "kiosk_controller": self.kiosk_controller}),
                                   "weather: precipitation": (WeatherView, {"overlay_type": 'precipitation'}),
                                   "weather: temperature": (WeatherView, {"overlay_type": 'temperature'}),
                                   "weather: cloud": (WeatherView, {"overlay_type": 'cloud'}),

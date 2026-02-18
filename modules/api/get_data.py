@@ -35,8 +35,12 @@ with open("tokens.json") as f:
 astro_session = requests_cache.CachedSession('.cache/astro/cached_requests', expire_after=60)
 met_office_session = requests_cache.CachedSession('.cache/met_office/cached_requests', expire_after=3600)
 
-def get_astro_data(lon_lat: tuple, timestamp: str = None, retries: int = 5) -> list:
-    userpass = token_config['astronomy_config']['id'] + ":" + token_config['astronomy_config']['secret']
+def get_astro_data(astro_api_user_id: str,
+                   astro_api_user_secret: str,
+                   lon_lat: tuple, 
+                   timestamp: str = None, 
+                   retries: int = 5) -> list:
+    userpass = astro_api_user_id + ":" + astro_api_user_secret
     authString = base64.b64encode(userpass.encode()).decode()
 
     if timestamp is None:
@@ -64,6 +68,7 @@ def get_astro_data(lon_lat: tuple, timestamp: str = None, retries: int = 5) -> l
 
     return [x[0] for x in pd.DataFrame.from_dict(response['data']['table']['rows'])['cells']]
 
+# TODO: token
 def get_met_office_grib(file_id: str = None, retries: int = 5) -> dict:
     safe_file_id = quote(file_id + str(datetime.datetime.now().hour), safe="")
 
@@ -104,7 +109,10 @@ def get_met_office_grib(file_id: str = None, retries: int = 5) -> dict:
 
     return {"image": image, "value_range": value_range, "timestamp": response.created_at}
 
-def get_strava_data(period: tuple[datetime.datetime, datetime.datetime] = (datetime.datetime.today() - datetime.timedelta(days = 30), datetime.datetime.now()), cache_frequency: datetime.timedelta = datetime.timedelta(hours = 1), cache_filepath: Path = Path("./data/strava_data_cache.json")) -> dict:
+#TODO: token
+def get_strava_data(period: tuple[datetime.datetime, datetime.datetime] = (datetime.datetime.today() - datetime.timedelta(days = 30), datetime.datetime.now()), 
+                    cache_frequency: datetime.timedelta = datetime.timedelta(hours = 1), 
+                    cache_filepath: Path = Path("./data/strava_data_cache.json")) -> dict:
     # strava oauth is a pain
 
     # process goes:

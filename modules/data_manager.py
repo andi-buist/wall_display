@@ -1,103 +1,114 @@
 from PySide6 import QtCore, QtWebSockets
 from PySide6.QtNetwork import QAbstractSocket
+from typing import Literal
+from modules.api import get_data
 import json
-
-# TODO: Continue with subclassing
 
 class DataManager(QtCore.QObject):
     '''
     A generic data management object that subscribes to signals to keep an internal entity dictionary updated.
-    Can also be set up to do a complete refresh at a scheduled rate (ms).
+    Can be set up to do a complete refresh at a scheduled rate (ms).
     '''
     data_update = QtCore.Signal()  # signal triggered by data refreshing
     data_event = QtCore.Signal(dict)  # signal triggered by a heard pubsub event
 
     def __init__(self,
-                 url: str,
-                 auth_token: str,
-                 scheduled_refresh_rate: int = None,
-                 parent=None):
-        '''
-        Docstring for __init__
-        
-        :param url: Pubsub URL
-        :type url: str
-        :param auth_token: Pubsub authorisation token
-        :type auth_token: str
-        :param scheduled_refresh_rate: Number of milliseconds between complete entity dictionary refreshes
-        :type scheduled_refresh_rate: int
-        '''
-        super().__init__(parent)
+                 url: str = None,
+                 auth_token: str = None,
+                 refresh_rate: int = None,
+                 connection_type: Literal['ws','api'] = 'ws'):
+        """
+        Instantiate a new generic DataManager
 
-        # Single websocket
-        self.ws = QtWebSockets.QWebSocket()
+        :param url: WebSocket URL
+        :type url: str
+        :param auth_token: WebSocket authorisation token
+        :type auth_token: str
+        :param refresh_rate: Number of milliseconds between complete entity dictionary refreshes
+        :type refresh_rate: int
+        :param connection_type: Whether to establish a maintained WebSocket connection or perform routine API fetches
+        :type connection_type: Literal['ws', 'api']
+        """
+        super().__init__(parent = None)
+        self.connection_type = connection_type
+        self.data: dict | list
 
         # Connection settings
         self.connection_settings = {'url': url,
                                     'auth_token': auth_token}
+        
+        match self.connection_type:
+            case 'ws':
+                # Message ID tracking
+                self._message_id = 2
+                self._get_states_id = None  # Track the last get_states message id
 
-        # Self-check timer for diagnostics, connection timeout, etc.
-        self._check_timer = QtCore.QTimer(self)
-        self._check_timer.setInterval(30000)
-        self._check_timer.timeout.connect(self._self_check)
+                #WebSocket
+                self.ws = QtWebSockets.QWebSocket()
 
+                # Self-check timer for WebSocket diagnostics, connection timeout, etc.
+                self._check_timer = QtCore.QTimer(self)
+                self._check_timer.setInterval(30000)
+                self._check_timer.timeout.connect(self._ws_self_check)
+
+                # Connect signals
+                self.ws.connected.connect(self._ws_on_connected)
+                self.ws.textMessageReceived.connect(self._ws_on_message)
+
+                # Start connection
+                self._ws_open_connection()
+            case 'api':
+                # Initial data fetch, _schedule_timer will take over from then.
+                self._send_data_request()
+        
         # Timer for periodic data request
-        if scheduled_refresh_rate:
+        if refresh_rate:
             self._schedule_timer = QtCore.QTimer(self)
-            self._schedule_timer.setInterval(scheduled_refresh_rate)
+            self._schedule_timer.setInterval(refresh_rate)
             self._schedule_timer.timeout.connect(self._send_data_request)
-
-        # Connect signals
-        self.ws.connected.connect(self._on_connected)
-        self.ws.textMessageReceived.connect(self._on_message)
-
-        # Start connection
-        self._open_connection()
-
-        self._message_id = 2
-        self._get_states_id = None  # Track the last get_states message id
+            # After a delay, start the timer. Longer to permit WS connection setup to complete
+            QtCore.QTimer.singleShot(10000, self._schedule_timer.start)
     
-    def _open_connection(self):
+    def _ws_open_connection(self) -> None:
         self.ws.open(QtCore.QUrl(self.connection_settings['url']))
 
     # Initial connection on ws.connected, send authentication token
-    def _on_connected(self):
+    def _ws_on_connected(self) -> None:
         # Authenticate
         self.ws.sendTextMessage(json.dumps({"type": "auth", "access_token": self.connection_settings['auth_token']}))
         # After a short delay, send get_states and subscribe to events
-        QtCore.QTimer.singleShot(1000, self._post_auth_setup)
+        QtCore.QTimer.singleShot(1000, self._ws_post_auth_setup)
 
-    # handles all incoming traffic - this is the automatic response to any action or update
-    def _on_message(self, message):
-        pass
-    
     # First data fetch, stock self & subscribe to state changes
-    def _post_auth_setup(self):
+    def _ws_post_auth_setup(self) -> None:
         self._send_data_request() # initial request
-        self._subscribe() # subscribe to state changes
+        self._ws_subscribe() # subscribe to state changes
         self._check_timer.start()
 
-        # If scheduled, restart schedule timer
-        if hasattr(self, "_schedule_timer"):
-            self._schedule_timer.start()
-
     # Regular internal check for closed connection re-establishment
-    def _self_check(self):
+    def _ws_self_check(self) -> None:
         if self.ws.state() == QAbstractSocket.SocketState.ConnectedState:
             self.ws.ping()
         else:
             print(str(self) + " WebSocket connection is offline. Attempting restart...")
-            self._open_connection()
-
-    # Get data 
-    def _send_data_request(self):
+            self._ws_open_connection()
+    
+    # Event subscription 
+    def _ws_subscribe(self) -> None:
+        """
+        Overwrite in subclass
+        """
+        pass
+    
+    # Respond to incoming message
+    def _ws_on_message(self, message) -> None:
         """
         Overwrite in subclass
         """
         pass
 
-    # Event subscription 
-    def _subscribe(self):
+    # Get data 
+    def _send_data_request(self) -> None:
         """
         Overwrite in subclass
         """
@@ -113,13 +124,27 @@ class HASSDataManager(DataManager):
     def __init__(self, 
                  url: str,
                  auth_token: str,
-                 scheduled_refresh_rate: int = None, 
-                 parent = None):
-        super().__init__(url, auth_token, scheduled_refresh_rate, parent)
-
-        self.data: dict = {}
+                 refresh_rate: int = None):
+        super().__init__(url = url, 
+                         auth_token = auth_token, 
+                         refresh_rate = refresh_rate,
+                         connection_type = 'ws')
     
-    def _on_message(self, message):
+    def _send_data_request(self) -> None:
+        print(str(self) + " refreshing all data")
+        self._message_id += 1
+        self._get_states_id = self._message_id
+        self.ws.sendTextMessage(json.dumps({"id": self._message_id, "type": "get_states"}))
+    
+    def _ws_subscribe(self) -> None:
+        self._message_id += 1
+        self.ws.sendTextMessage(json.dumps({
+            "id": self._message_id,
+            "type": "subscribe_events",
+            "event_type": "state_changed"
+        }))
+    
+    def _ws_on_message(self, message) -> None:
         msg_dict = json.loads(message)
 
         # if type is "result", fetched all (direct request from timer)
@@ -132,17 +157,26 @@ class HASSDataManager(DataManager):
             self.data[new_state['entity_id']] = new_state
             self.data_update.emit()
             self.data_event.emit(new_state)
-    
+
+class AstronomyDataManager(DataManager):
+    def __init__(self,
+                 api_user_id: str,
+                 api_user_secret: str,
+                 lon_lat: tuple[float,float],
+                 refresh_rate: int = None):
+        
+        self.api_user_id = api_user_id
+        self.api_user_secret = api_user_secret
+        self.lon_lat = lon_lat
+
+        super().__init__(refresh_rate = refresh_rate,
+                         connection_type = 'api')
+
     def _send_data_request(self):
         print(str(self) + " refreshing all data")
-        self._message_id += 1
-        self._get_states_id = self._message_id
-        self.ws.sendTextMessage(json.dumps({"id": self._message_id, "type": "get_states"}))
-    
-    def _subscribe(self):
-        self._message_id += 1
-        self.ws.sendTextMessage(json.dumps({
-            "id": self._message_id,
-            "type": "subscribe_events",
-            "event_type": "state_changed"
-        }))
+        self.data = get_data.get_astro_data(self.api_user_id,
+                                            self.api_user_secret,
+                                            self.lon_lat)
+        self.data_update.emit()
+
+# TODO: met office, strava

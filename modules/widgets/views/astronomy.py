@@ -10,11 +10,8 @@ from matplotlib.offsetbox import OffsetImage, AnnotationBbox
 import math
 
 class AstronomyView(View):
-    def __init__(self, data_manager: DataManager, kiosk_controller: KioskController, parent=None):
+    def __init__(self, data_manager: AstronomyDataManager, kiosk_controller: KioskController, parent=None):
         super().__init__(data_manager, kiosk_controller, parent)
-        self.map_focus = "all"
-        self.people = {}
-        self.people_filtered = {}
 
         layout = QtWidgets.QVBoxLayout()
         self.setLayout(layout)
@@ -27,52 +24,18 @@ class AstronomyView(View):
         self.view_label_info = QtWidgets.QLabel()
         self.view_label_info.setAlignment(QtCore.Qt.AlignCenter)
         layout.addWidget(self.view_label_info)
-
-        self.focus_button = QtWidgets.QPushButton("Focus: All")
-        self.focus_button.clicked.connect(self.toggle_focus)
-        layout.addWidget(self.focus_button)
-
-    def _on_data_update(self):
-        self.people = {id: e for id, e in self.data_manager.data.items() if 'person' in id}
-        super()._on_data_update() # triggers render() + data_ready
     
     def get_latest_data(self):
-        # Determine focus
-        if self.map_focus == "all":
-            self.people_filtered = self.people
-        else: 
-            self.people_filtered = { k: v for k, v in self.people.items() if k == self.map_focus } 
-            
-        # If no people yet, return empty structure 
-        if not self.people_filtered: 
-            return {"plot_params": None, "data": {}}
-        
-        # Compute params
-        coords = [(p['attributes']['longitude'], p['attributes']['latitude']) for p in self.people_filtered.values()]
-        plot_params = calculate_plot_params(coords)
+        plot_params = calculate_plot_params([self.data_manager.lon_lat])
         
         # External astronomy data
-        astro = get_astronomy_map_data(token_config["astronomy_lon_lat"], plot_params['extent'], (plot_params['dimension'] / 2) + (plot_params['buffer'] / 2))
+        astro = get_astronomy_map_data(self.data_manager.data, self.data_manager.lon_lat, plot_params['extent'], (plot_params['dimension'] / 2) + (plot_params['buffer'] / 2))
         astro = self.kiosk_select_data(astro) 
         
         return {
             "plot_params": plot_params,
             "data": astro
             }
-    
-    def toggle_focus(self):
-        focus_options = ["all"] + sorted(list(self.people.keys()))
-
-        idx = focus_options.index(self.map_focus) if self.map_focus in focus_options else 0
-        self.map_focus = focus_options[(idx + 1) % len(focus_options)]
-
-        # if focus is a valid person, get their name, else just nicely format the focus name
-        if self.map_focus in self.people.keys():
-            self.focus_button.setText(f"Focus: {self.people[self.map_focus]['attributes']['friendly_name']}")
-        else:
-            self.focus_button.setText(f"Focus: {self.map_focus.title()}")
-        
-        self.render()
 
     def render(self):
         # Determine label size
@@ -210,12 +173,10 @@ class AstronomyView(View):
                     horizontalalignment = 'center',
                     bbox = legend_bbox)
 
-def get_astronomy_map_data(lon_lat: tuple, extent: dict, max_radius: float) -> dict:
+def get_astronomy_map_data(astro_data:list, lon_lat: tuple, extent: dict, max_radius: float) -> dict:
         # create a list of permitted celestial bodies
         allowed_bodies = ['sun', 'moon', 'mercury', 'venus', 'mars', 'jupiter', 'saturn', 'uranus', 'neptune']
-                    
-        # data fetch from api
-        astro_data = get_astro_data(lon_lat)
+
         astro_data = [body for body in astro_data if body['id'] in allowed_bodies]
         
         data = {}

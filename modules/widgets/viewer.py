@@ -19,13 +19,13 @@ with open("tokens.json") as f:
 matplotlib.use('agg')
 cartopy.config['cache_dir'] = "./.cache/cartopy/"
 
-class Viewer(HASSWidget):
+class Viewer(QtWidgets.QWidget):
     def __init__(self, 
-                 data_manager: HASSDataManager,
                  kiosk_controller: KioskController, 
                  view_options: dict[str, Callable[[], View]], 
-                 infobox_options: dict[str, Callable[[], InfoBox]] = None):
-        super().__init__(data_manager)
+                 infobox_options: dict[str, Callable[[], InfoBox]] = None,
+                 parent = None):
+        super().__init__(parent = parent)
         self.kiosk_controller = kiosk_controller
 
         self.view_options = view_options
@@ -98,13 +98,13 @@ class Viewer(HASSWidget):
         # add infobox if needed
         if self.view_choice in self.infobox_options.keys():
             cls, kwargs = self.infobox_options[self.view_choice]
-            self.infobox = cls(data_manager = self.data_manager, parent = self.view_panel_left, **kwargs)
+            self.infobox = cls(parent = self.view_panel_left, **kwargs)
             self.view_panel_left_layout.addWidget(self.infobox)
         
         # add view if needed
         if self.view_choice in self.view_options.keys():
             cls, kwargs = self.view_options[self.view_choice]
-            self.view = cls(data_manager = self.data_manager, parent = self.view_panel_right, **kwargs)
+            self.view = cls(parent = self.view_panel_right, **kwargs)
             self.view_panel_right_layout.addWidget(self.view)
     
     def clear_panels(self):

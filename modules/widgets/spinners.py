@@ -185,7 +185,8 @@ class RGBSpinner(HASSWidget):
         
         for entity_id in self.entity_ids:
             entity = self.data_manager.data[entity_id]
-            adj_rgb = rgb = get_value_adjusted_rgb(rgb, entity['attributes']['brightness'])
+            if entity['attributes']['brightness']:
+                rgb = get_value_adjusted_rgb(rgb, entity['attributes']['brightness'])
 
             #print(get_colour_name(adj_rgb))
 
@@ -194,7 +195,7 @@ class RGBSpinner(HASSWidget):
                                 target = dict(entity_id = entity_id))
             #for messages that would return a response, include return_response = True
             msg_template['service'] = "turn_on"
-            msg_template['service_data'] = dict(rgb_color = adj_rgb)
+            msg_template['service_data'] = dict(rgb_color = rgb)
 
             self.data_manager.send_command(msg_template)
     

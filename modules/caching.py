@@ -2,26 +2,6 @@ import json
 import datetime
 from pathlib import Path
 
-global global_entity_cache
-global_entity_cache = {}
-
-#TODO: I think entity_cache functions are now deprecated. We likely don't need/want to keep a global entity cache..?
-
-def entity_cache_write(entity_id: str, key: str, value):
-    """Assigns the specified value to the key of an entity_id dictionary in the global_entity_cache."""
-    if entity_id in global_entity_cache.keys():
-        global_entity_cache[entity_id][key] = value
-    else:
-        global_entity_cache[entity_id] = {key: value}
-
-def entity_cache_read(entity_id: str, key: str, fallback):
-    """Gets the value of the specified key from the entity_id dictionary of the global_entity_cache. If there's nothing there, it returns fallback."""
-    #pull cached value if exists
-    if entity_id in global_entity_cache.keys() and key in global_entity_cache[entity_id]:
-        return global_entity_cache[entity_id][key]
-    else:
-        return fallback
-
 def localcache_write(filepath: str, id: str, timestamp: float, value: any, hr_limit: int = None):
     if Path(filepath).is_file():
         with open(filepath) as json_data:
