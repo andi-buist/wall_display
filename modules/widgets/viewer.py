@@ -20,7 +20,11 @@ matplotlib.use('agg')
 cartopy.config['cache_dir'] = "./.cache/cartopy/"
 
 class Viewer(HASSWidget):
-    def __init__(self, data_manager: DataManager, kiosk_controller: KioskController, view_options: dict[str, Callable[[], View]], infobox_options: dict[str, Callable[[], InfoBox]] = None):
+    def __init__(self, 
+                 data_manager: HASSDataManager,
+                 kiosk_controller: KioskController, 
+                 view_options: dict[str, Callable[[], View]], 
+                 infobox_options: dict[str, Callable[[], InfoBox]] = None):
         super().__init__(data_manager)
         self.kiosk_controller = kiosk_controller
 

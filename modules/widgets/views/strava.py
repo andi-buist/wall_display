@@ -23,8 +23,8 @@ class StravaView(View):
         self.view_label_info.setAlignment(QtCore.Qt.AlignCenter)
         layout.addWidget(self.view_label_info)
     
-    def set_data(self, entities): # in Views like strava, this is sort of overkill since no data is extracted, but it's an available timer
-        super().set_data(entities)
+    def _on_data_update(self, entities): # in Views like strava, this is sort of overkill since no data is extracted, but it's an available timer
+        super()._on_data_update(entities)
 
     def get_latest_data(self):
         data = get_strava_map_data(period = (datetime.datetime.today() - datetime.timedelta(days=30), datetime.datetime.now()))

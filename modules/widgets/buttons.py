@@ -22,7 +22,7 @@ class HASSEntityButton(HASSWidget):
             self.button.setStyleSheet("")
     
     def light_switch(self, entity_id):
-        entity = self.entities[entity_id]
+        entity = self.data[entity_id]
 
         msg_template = dict(type = "call_service",
                             domain = "light",

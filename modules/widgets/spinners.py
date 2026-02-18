@@ -5,7 +5,7 @@ from io import BytesIO
 from PIL import Image
 import webcolors
 
-from .widget_core import *
+from modules.widgets.widget_core import *
 
 global xkcd_colours
 
@@ -26,7 +26,6 @@ class Spinner(QtWidgets.QWidget):
         """
         Create a new ValueSpinner
 
-        :param data_manager: The app's DataManager
         :param orientation: Orientation of the spinner
         :type orientation: Literal["vertical", "horizontal"]
         :param bits: Values 0 -> n-1 the spinner can represent
@@ -94,7 +93,7 @@ class Spinner(QtWidgets.QWidget):
 
 class VSpinner(HASSWidget):
     def __init__(self, 
-                 data_manager: DataManager, 
+                 data_manager: HASSDataManager, 
                  entity_id: str=None, 
                  orientation: Literal["vertical", "horizontal"] = "vertical", 
                  bits: int = 8,  
@@ -142,7 +141,7 @@ class RGBSpinner(HASSWidget):
     A HASSWidet used to control an entity with RGB values (lights, bulbs)
     '''
     def __init__(self, 
-                 data_manager: DataManager, 
+                 data_manager: HASSDataManager, 
                  entity_id: str=None, 
                  orientation: Literal["vertical", "horizontal"] = "vertical", 
                  bits: int = 8,  
@@ -185,7 +184,7 @@ class RGBSpinner(HASSWidget):
         rgb = tuple(int(255 * s.value/(s.bits - 1)) for s in self.spinners.values())
         
         for entity_id in self.entity_ids:
-            entity = self.entities[entity_id]
+            entity = self.data[entity_id]
             adj_rgb = rgb = get_value_adjusted_rgb(rgb, entity['attributes']['brightness'])
 
             #print(get_colour_name(adj_rgb))

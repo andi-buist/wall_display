@@ -15,12 +15,15 @@ from modules.widgets.widget_core import *
 from modules.caching import *
 from modules.api.get_data import *
 from modules.widgets.kiosk import *
+from modules.data_manager import DataManager
 
 class View(QtWidgets.QWidget):
-    def __init__(self, data_manager: DataManager, kiosk_controller: KioskController = None, parent=None):
+    def __init__(self, data_manager: DataManager, 
+                 kiosk_controller: KioskController = None, 
+                 parent=None):
         super().__init__(parent)
         self.data_manager = data_manager
-        self.latest_entity_data = {}
+        self.latest_data = {}
 
         if kiosk_controller:
             self.kiosk_index = 0
@@ -28,8 +31,8 @@ class View(QtWidgets.QWidget):
 
             self.kiosk_controller = kiosk_controller
 
-        data_manager.entities_updated.connect(self.set_data)
-        data_manager.entity_state_changed.connect(self.update_single)
+        data_manager.data_update.connect(self._on_data_update)
+        data_manager.data_event.connect(self._on_data_event)
 
         QtCore.QTimer.singleShot(0, self._apply_initial_data_snapshot)
     
@@ -38,15 +41,14 @@ class View(QtWidgets.QWidget):
         self.render()
     
     def _apply_initial_data_snapshot(self): 
-        if self.data_manager.entities: 
-            self.set_data(self.data_manager.entities)
+        if self.data_manager.data: 
+            self._on_data_update(self.data_manager.data)
 
-    def set_data(self, entities):
-        self.latest_entity_data = entities
+    def _on_data_update(self, data):
+        self.latest_data = data
         self.render()
 
-    def update_single(self, entity):
-        self.latest_entity_data[entity['entity_id']] = entity
+    def _on_data_event(self, entity):
         self.render()
 
     def kiosk_select_data(self, data: dict, start_unselected: bool = True) -> dict:

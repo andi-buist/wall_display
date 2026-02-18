@@ -1,7 +1,7 @@
-from .widget_core import HASSWidget
 from PySide6 import QtCore, QtWidgets
 import sys
 import datetime
+from html import escape
 
 class EmittingStream(QtCore.QObject):
     text_written = QtCore.Signal(str)
@@ -12,6 +12,8 @@ class EmittingStream(QtCore.QObject):
 
     def write(self, text):
         if text.strip():
+            # permit object.__str__ printing, among others
+            text = escape(text)
             timestamp = str(datetime.datetime.now().replace(microsecond=0))
             self.text_written.emit(
                 f"<b><u>{timestamp}:</u></b>&nbsp;&nbsp;{text}"

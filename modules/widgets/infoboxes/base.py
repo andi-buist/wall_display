@@ -4,32 +4,36 @@ from modules.widgets.widget_core import *
 from modules.caching import *
 from modules.api.get_data import *
 from modules.widgets.kiosk import *
+from modules.data_manager import DataManager
 
 class InfoBox(QtWidgets.QWidget):
-    def __init__(self, data_manager: DataManager, kiosk_controller: KioskController, parent=None):
+    def __init__(self, 
+                 data_manager: DataManager, 
+                 kiosk_controller: KioskController, 
+                 parent=None):
         super().__init__(parent)
         self.data_manager = data_manager
-        self.latest_entity_data = {}
+        self.latest_data = {}
 
         if kiosk_controller:
             self.kiosk_index = 0
             kiosk_controller.tick.connect(self.on_kiosk_timer_next)
 
-        data_manager.entities_updated.connect(self.set_data)
-        data_manager.entity_state_changed.connect(self.update_single)
+        data_manager.data_update.connect(self.set_data)
+        data_manager.data_event.connect(self.update_single)
 
         QtCore.QTimer.singleShot(0, self._apply_initial_data_snapshot)
     
     def _apply_initial_data_snapshot(self): 
-        if self.data_manager.entities: 
-            self.set_data(self.data_manager.entities)
+        if self.data_manager.data: 
+            self.set_data(self.data_manager.data)
 
-    def set_data(self, entities):
-        self.latest_entity_data = entities
+    def set_data(self, data):
+        self.latest_data = data
         self.update_ui()
     
     def update_single(self, entity):
-        self.latest_entity_data[entity['entity_id']] = entity
+        self.latest_data[entity['entity_id']] = entity
         self.update_ui()
     
     def kiosk_select_data(self, data: dict, start_unselected: bool = True) -> dict:

@@ -35,11 +35,11 @@ class MapView(View):
         self.focus_button.clicked.connect(self.toggle_focus)
         layout.addWidget(self.focus_button)
 
-    def set_data(self, entities):
+    def _on_data_update(self, entities):
         self.people = {id: e for id, e in entities.items() if 'person' in id}
         self.zones = {id: e for id, e in entities.items() if 'zone' in id}
         
-        super().set_data(entities) # triggers render() + data_ready
+        super()._on_data_update(entities) # triggers render() + data_ready
     
     def get_latest_data(self):
         # Determine focus

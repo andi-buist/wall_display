@@ -1,11 +1,11 @@
 from PySide6 import QtCore, QtWidgets
 from PySide6.QtGui import QImage, QPixmap
-from ..data_manager import DataManager
+from ..data_manager import HASSDataManager
 import theme
 
 class HASSWidget(QtWidgets.QWidget):
     def __init__(self,
-                 data_manager: DataManager,
+                 data_manager: HASSDataManager,
                  entity_types: str | list[str] = None,
                  entity_ids: str | list[str] = None, 
                  parent = None,
@@ -27,45 +27,48 @@ class HASSWidget(QtWidgets.QWidget):
             case list():
                 self.entity_ids = self.entity_ids + entity_ids
 
-        self.data_manager.entities_updated.connect(self._on_entities_updated)
-        self.data_manager.entity_state_changed.connect(self._on_entity_state_changed)
+        self.data_manager.data_update.connect(self._on_data_update)
+        self.data_manager.data_event.connect(self._on_data_event)
 
-        self.entities = {}
+        self.data = {}
 
         self.error_label = None
 
-    def _on_entities_updated(self, entities):
-        # Filter for relevant entities
+    # TODO: I think there's quite a lot of redundancy here, partly so we have a generic response to
+    # update/events that then calls a subclassable response, which is fine... but also why are we storing data
+    # in the widget at all? surely easier just to fetch the data from the bundled datamanager. we're duping
+    # remove this.
+
+    def _on_data_update(self, data):
+        # Filter for relevant data
         if len(self.entity_types) > 0:
-            self.entity_ids = list(set(self.entity_ids + self._get_matching_entity_ids_by_type(entities))) # if types specified, get valid ids and merge into entity_ids (unique)
+            self.entity_ids = list(set(self.entity_ids + self._get_matching_entity_ids_by_type(data))) # if types specified, get valid ids and merge into entity_ids (unique)
 
         relevant = {}
 
         for eid in self.entity_ids:
-            if eid in entities:
-                relevant[eid] = entities[eid]
+            if eid in data:
+                relevant[eid] = data[eid]
 
-        self.entities.update(relevant)
+        self.data.update(relevant)
         self.on_entities_update(relevant)
 
-    def _on_entity_state_changed(self, entity):
-        if entity['entity_id'] in self.entity_ids:
-            self.entities[entity['entity_id']] = entity
-            self.on_entity_update(entity)
+    def _on_data_event(self, event):
+        self.on_entity_update(event)
 
-    def on_entities_update(self, entities):
-        """Override in subclass: called when all entities are refreshed."""
+    def on_entities_update(self, data):
+        """Override in subclass: called when all data are refreshed."""
         pass
 
     def on_entity_update(self, entity):
         """Override in subclass: called when a single entity changes."""
         pass
 
-    def _get_matching_entity_ids_by_type(self, entities: dict):
+    def _get_matching_entity_ids_by_type(self, data: dict):
         relevant_entities = []
         if self.entity_types:
             for type in self.entity_types:
-                relevant_entities = relevant_entities + [id for id in entities.keys() if type in id]
+                relevant_entities = relevant_entities + [id for id in data.keys() if type in id]
 
         return relevant_entities
     

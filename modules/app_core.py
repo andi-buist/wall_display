@@ -13,6 +13,13 @@ from modules.widgets.spinners import *
 from modules.widgets.terminal import *
 import theme
 
+import json
+with open("tokens.json") as f: 
+    hass_config = json.load(f)["hass_config"]
+
+HASS_WS_URL = hass_config['url']
+HASS_WS_TOKEN = hass_config['secret']
+
 class HomeApp(QtWidgets.QApplication):
     def __init__(self, resolution: tuple[int] = (800,480)):
         QtWidgets.QApplication.__init__(self)
@@ -38,9 +45,8 @@ class HomeApp(QtWidgets.QApplication):
         layout = QtWidgets.QHBoxLayout(central_widget)
 
         # create a data manager
-        self.data_manager = DataManager()
-        self.data_manager.entities_updated.connect(self.on_entities_updated)
-        self.data_manager.entity_state_changed.connect(self.on_entity_state_changed)
+        self.data_manager = HASSDataManager(HASS_WS_URL, HASS_WS_TOKEN)
+        self.data_manager.data_event.connect(self.on_entity_state_changed)
 
         # TODO: remove
         slider_test = QtWidgets.QWidget()
@@ -108,11 +114,6 @@ class HomeApp(QtWidgets.QApplication):
     def slot(self, button):
         idx = self.button_store.index(button)
         self.stack.setCurrentIndex(idx)
-    
-    # these are mostly here for debug. can be removed/deactivated and run silently in widgets
-    def on_entities_updated(self, entities):
-        # Update all widgets with new entities dict
-        print(f"Scheduled data refresh, {str(len(entities))} entities found")
 
     def on_entity_state_changed(self, entity):
         # Update only the widget(s) for this entity
