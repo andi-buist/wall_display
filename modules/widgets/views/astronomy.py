@@ -10,7 +10,10 @@ from matplotlib.offsetbox import OffsetImage, AnnotationBbox
 import math
 
 class AstronomyView(View):
-    def __init__(self, data_manager: AstronomyDataManager, kiosk_controller: KioskController, parent=None):
+    def __init__(self, 
+                 data_manager: AstronomyDataManager, 
+                 kiosk_controller: KioskController, 
+                 parent=None):
         super().__init__(data_manager, kiosk_controller, parent)
 
         layout = QtWidgets.QVBoxLayout()
@@ -25,11 +28,13 @@ class AstronomyView(View):
         self.view_label_info.setAlignment(QtCore.Qt.AlignCenter)
         layout.addWidget(self.view_label_info)
     
+    #TODO: I think this idea needs removing. we shouldn't need to calculate plot params elsewhere and fling them around.
+    # we can just rely on self.data_manager.data
     def get_latest_data(self):
         plot_params = calculate_plot_params([self.data_manager.lon_lat])
         
         # External astronomy data
-        astro = get_astronomy_map_data(self.data_manager.data, self.data_manager.lon_lat, plot_params['extent'], (plot_params['dimension'] / 2) + (plot_params['buffer'] / 2))
+        astro = get_astronomy_map_data(self.data_manager.data)
         astro = self.kiosk_select_data(astro) 
         
         return {
@@ -67,7 +72,9 @@ class AstronomyView(View):
         data = latest_data['data']
 
         fig, ax = plt_make(plot_params['extent'])
-        self.plt_add_astronomy(data, ax, plot_params) # +map buffer would have circle perfectly fit square, but we want some allowance for icons
+        self.plt_add_astronomy(data,
+                               ax, 
+                               plot_params) # +map buffer would have circle perfectly fit square, but we want some allowance for icons
 
         self.view_label_info.clear()
 
@@ -83,7 +90,10 @@ class AstronomyView(View):
     
     # plotting function
 
-    def plt_add_astronomy(self, data: dict, ax: plt.Axes, plot_params: dict) -> None:
+    def plt_add_astronomy(self, 
+                          data: list, 
+                          ax: plt.Axes, 
+                          plot_params: dict) -> None:
 
         lon_lat = plot_params['centre']
         extent = plot_params['extent']
@@ -173,7 +183,7 @@ class AstronomyView(View):
                     horizontalalignment = 'center',
                     bbox = legend_bbox)
 
-def get_astronomy_map_data(astro_data:list, lon_lat: tuple, extent: dict, max_radius: float) -> dict:
+def get_astronomy_map_data(astro_data:list) -> dict:
         # create a list of permitted celestial bodies
         allowed_bodies = ['sun', 'moon', 'mercury', 'venus', 'mars', 'jupiter', 'saturn', 'uranus', 'neptune']
 

@@ -3,6 +3,18 @@ from PySide6.QtNetwork import QAbstractSocket
 from typing import Literal
 from modules.api import get_data
 import json
+import base64
+import requests
+import datetime
+import time
+import pandas as pd
+
+# Met Office
+from urllib.parse import quote
+from PIL import Image
+import xarray as xr
+import os
+import numpy as np
 
 class DataManager(QtCore.QObject):
     '''
@@ -32,13 +44,13 @@ class DataManager(QtCore.QObject):
         super().__init__(parent = None)
         self.connection_type = connection_type
         self.data: dict | list
-
-        # Connection settings
-        self.connection_settings = {'url': url,
-                                    'auth_token': auth_token}
         
         match self.connection_type:
             case 'ws':
+                # Connection settings
+                self.connection_settings = {'url': url,
+                                            'auth_token': auth_token}
+
                 # Message ID tracking
                 self._message_id = 2
                 self._get_states_id = None  # Track the last get_states message id
@@ -130,7 +142,7 @@ class HASSDataManager(DataManager):
                          refresh_rate = refresh_rate,
                          connection_type = 'ws')
     
-    def _send_data_request(self) -> None:
+    def _send_data_request(self):
         print(str(self) + " refreshing all data")
         self._message_id += 1
         self._get_states_id = self._message_id
@@ -158,25 +170,123 @@ class HASSDataManager(DataManager):
             self.data_update.emit()
             self.data_event.emit(new_state)
 
-class AstronomyDataManager(DataManager):
+class APIDataManager(DataManager):
+    def __init__(self,
+                 url: str = None,
+                 params: dict = None,
+                 headers: dict = None,
+                 max_retries: int = 5,
+                 refresh_rate: int = None):
+        
+        self.connection_settings = {"url": url,
+                                    "params": params,
+                                    "headers": headers,
+                                    "max_retries": max_retries}
+
+        super().__init__(refresh_rate = refresh_rate,
+                         connection_type = 'api')
+    
+    def _send_data_request(self):
+        for attempt in range(self.connection_settings['max_retries']):
+            try:
+                response = requests.get(url =self.connection_settings['url'],
+                                        params = self.connection_settings['params'],
+                                        headers = self.connection_settings['headers'])
+                break
+            except requests.exceptions.ConnectionError:
+                time.sleep(2 ** attempt)
+        return response
+
+class AstronomyDataManager(APIDataManager):
     def __init__(self,
                  api_user_id: str,
                  api_user_secret: str,
                  lon_lat: tuple[float,float],
                  refresh_rate: int = None):
         
-        self.api_user_id = api_user_id
-        self.api_user_secret = api_user_secret
         self.lon_lat = lon_lat
 
-        super().__init__(refresh_rate = refresh_rate,
-                         connection_type = 'api')
+        userpass = api_user_id + ":" + api_user_secret
+        authString = base64.b64encode(userpass.encode()).decode()
+
+        params = {"longitude": str(lon_lat[0]),
+                  "latitude": str(lon_lat[1]),
+                  "elevation": str(0),
+                  "from_date": None,
+                  "to_date": None,
+                  "time": None}
+        headers = {"Authorization": "Basic " + authString}
+
+        super().__init__(url = "https://api.astronomyapi.com/api/v2/bodies/positions/",
+                         params = params,
+                         headers = headers,
+                         refresh_rate = refresh_rate)
 
     def _send_data_request(self):
         print(str(self) + " refreshing all data")
-        self.data = get_data.get_astro_data(self.api_user_id,
-                                            self.api_user_secret,
-                                            self.lon_lat)
+
+        # update request time component in params
+        dt = datetime.datetime.now(datetime.timezone.utc)
+        self.connection_settings['params']['from_date'] = dt.date()
+        self.connection_settings['params']['to_date'] = dt.date()
+        self.connection_settings['params']['time'] = dt.strftime("%H:%M:%S")
+
+        response = super()._send_data_request().json()
+        self.data = [x[0] for x in pd.DataFrame.from_dict(response['data']['table']['rows'])['cells']]
         self.data_update.emit()
 
-# TODO: met office, strava
+class MetOfficeDataManager(APIDataManager):
+    def __init__(self,
+                 api_order_id: str,
+                 api_file_id: str,
+                 api_user_secret: str,
+                 lon_lat: tuple[float,float],
+                 model_type: Literal['precipitation', 'temperature', 'cloud'],
+                 refresh_rate: int = None):
+        
+        self.lon_lat = lon_lat
+        self.model_type = model_type
+
+        self.api_order_id = api_order_id
+        self.api_file_id = api_file_id
+
+        headers = {"apikey": api_user_secret,
+                   "Accept": "*/*"}
+        
+        super().__init__(headers = headers,
+                         refresh_rate = refresh_rate)
+    
+    def _send_data_request(self):
+        print(str(self) + " refreshing all data")
+
+        # update request time component in params
+        current_file_id = quote(self.api_file_id + str(datetime.datetime.now().hour), safe="")
+        url = f"https://data.hub.api.metoffice.gov.uk/atmospheric-models/1.0.0/orders/{self.api_order_id}/latest/{current_file_id}/data"
+
+        self.connection_settings['url'] = url
+
+        response = super()._send_data_request()
+
+        # .grib parsing
+        raw_path =".cache/met_office/grib_bytes_tmp.grib2"
+        os.makedirs(os.path.dirname(raw_path), exist_ok=True)
+        with open(raw_path, "wb") as f:
+            f.write(response.content)
+
+        data = xr.open_dataset(raw_path,
+                            engine="cfgrib",
+                            backend_kwargs={"indexpath": ""}) # prevent idx file gen
+        # find name of primary data key
+        primary_key = list(data.data_vars.keys())[0]
+
+        # get values as array
+        values = np.flip(data[primary_key].values,0)
+        value_range = (values.min(), values.max())
+        # normalise
+        values = (((values - values.min())/(values.max() - values.min()))*255).astype(np.uint8)
+
+        self.data = {"image": Image.fromarray(values),
+                     "value_range": value_range,
+                     "timestamp": datetime.datetime.now()}
+        self.data_update.emit()
+        

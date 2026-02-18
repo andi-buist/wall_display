@@ -10,11 +10,10 @@ from scipy import ndimage
 import numpy as np
 
 class WeatherView(View):
-    def __init__(self, data_manager: DataManager, overlay_type: Literal["cloud", "temperature", "precipitation"], parent=None):
+    def __init__(self, 
+                 data_manager: MetOfficeDataManager, 
+                 parent = None):
         super().__init__(data_manager, parent = parent)
-        self.overlay_type = overlay_type
-
-        self.people = {}
 
         layout = QtWidgets.QVBoxLayout()
         self.setLayout(layout)
@@ -31,16 +30,16 @@ class WeatherView(View):
         layout.addWidget(self.view_label_info)
     
     def _on_data_update(self):
-        self.people = {id: e for id, e in self.data_manager.data.items() if 'person' in id}
-        
         super()._on_data_update() # triggers render() + data_ready
     
     def get_latest_data(self):
         # Compute params
-        plot_params = calculate_plot_params([(p['attributes']['longitude'], p['attributes']['latitude']) for p in self.people.values()], extent_dimension = 2.25)
+        plot_params = calculate_plot_params(lon_lat = [self.data_manager.lon_lat],
+                                            extent_dimension = 2.25)
         
         return {
-            "plot_params": plot_params
+            "plot_params": plot_params,
+            "data": self.data_manager.data
             }
     
     def render(self):
@@ -70,9 +69,6 @@ class WeatherView(View):
         plt.rcParams['font.family'] = "Nintendo DS BIOS"
 
         self.label_size = int(min(self.view_label.width(), self.view_label.height()))
-
-        if len(self.people) == 0: # loading
-            return None
         
         plot_params = latest_data['plot_params']
         map_bg = get_map_image(self.label_size, plot_params['extent'], plot_params['dimension'], plot_params['min_dimension'], 128, 1)
@@ -80,7 +76,8 @@ class WeatherView(View):
         fig, ax = plt_make(plot_params['extent'])
         ax.imshow(map_bg, extent = plot_params['extent'])
 
-        self.plt_add_met_office_view(ax, plot_params['extent'], type = self.overlay_type)
+        self.plt_add_met_office_view(self.data_manager.data, 
+                                     ax, plot_params['extent'])
 
         self.view_label_info.clear()
 
@@ -94,8 +91,11 @@ class WeatherView(View):
 
         return image
     
-    def plt_add_met_office_view(self, ax: plt.Axes, extent: tuple[float, float, float, float], type: str = Literal["cloud", "precipitation", "temperature"]) -> None:
-        result = get_met_office_grib(file_id=token_config['met_office_atmospheric_models_config']['file_id'][type])
+    def plt_add_met_office_view(self, 
+                                data: dict,
+                                ax: plt.Axes, 
+                                extent: tuple[float, float, float, float]) -> None:
+        result = self.data_manager.data
         view: Image.Image = result['image'].convert('L')
 
         # calculations to crop view to map extent
@@ -130,7 +130,7 @@ class WeatherView(View):
         arr = (arr // quantization_bin) * quantization_bin
 
         # invert if precip, temp, else we want to keep clouds white
-        match self.overlay_type:
+        match self.data_manager.model_type:
             case "precipitation" | "temperature":
                 view = Image.fromarray(255 - arr)
             case _:
@@ -165,7 +165,7 @@ class WeatherView(View):
         legend_bbox = dict(alpha = 1, edgecolor = "#000000", facecolor = "#ffffff")
 
         #add contour labels
-        match self.overlay_type:
+        match self.data_manager.model_type:
             case "cloud"|"precipitation":
                 [x.update(value = str(int((x['value']/255) * 100)) + "%") for x in view_text]
             case "temperature":

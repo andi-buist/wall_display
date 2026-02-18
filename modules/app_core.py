@@ -17,12 +17,18 @@ import json
 with open("tokens.json") as f: 
     token_config = json.load(f)
 
+HOME_LON_LAT = token_config['home_lon_lat']
+
 HASS_WS_URL = token_config['hass_config']['url']
 HASS_WS_TOKEN = token_config['hass_config']['secret']
 
 ASTRONOMY_API_USER_ID = token_config['astronomy_config']['id']
 ASTRONOMY_API_USER_SECRET = token_config['astronomy_config']['secret']
-ASTRONOMY_LON_LAT = token_config['astronomy_lon_lat']
+
+MET_OFFICE_API_ORDER_ID = token_config['met_office_atmospheric_models_config']['order_id']
+MET_OFFICE_API_FILE_IDS = token_config['met_office_atmospheric_models_config']['file_id']
+MET_OFFICE_API_USER_SECRET = token_config['met_office_atmospheric_models_config']['secret']
+
 
 class HomeApp(QtWidgets.QApplication):
     def __init__(self, resolution: tuple[int] = (800,480)):
@@ -49,9 +55,33 @@ class HomeApp(QtWidgets.QApplication):
         layout = QtWidgets.QHBoxLayout(central_widget)
 
         # Create DataManagers
-        self.hass_data_manager = HASSDataManager(HASS_WS_URL, HASS_WS_TOKEN, refresh_rate = 60000)
+        self.hass_data_manager = HASSDataManager(HASS_WS_URL, 
+                                                 HASS_WS_TOKEN, 
+                                                 refresh_rate = 60000)
         self.hass_data_manager.data_event.connect(self.on_entity_state_changed)
-        self.astro_data_manager = AstronomyDataManager(ASTRONOMY_API_USER_ID, ASTRONOMY_API_USER_SECRET, ASTRONOMY_LON_LAT, refresh_rate = 60000)
+        self.astro_data_manager = AstronomyDataManager(ASTRONOMY_API_USER_ID, 
+                                                       ASTRONOMY_API_USER_SECRET, 
+                                                       HOME_LON_LAT, 
+                                                       refresh_rate = 60000)
+        self.weather_data_managers = {
+            'precipitation': MetOfficeDataManager(MET_OFFICE_API_ORDER_ID,
+                                                  MET_OFFICE_API_FILE_IDS['precipitation'],
+                                                  MET_OFFICE_API_USER_SECRET,
+                                                  HOME_LON_LAT, 
+                                                  'precipitation',
+                                                  refresh_rate = 3600000),
+            'temperature': MetOfficeDataManager(MET_OFFICE_API_ORDER_ID,
+                                                  MET_OFFICE_API_FILE_IDS['temperature'],
+                                                  MET_OFFICE_API_USER_SECRET,
+                                                  HOME_LON_LAT, 
+                                                  'temperature',
+                                                  refresh_rate = 3600000),
+            'cloud': MetOfficeDataManager(MET_OFFICE_API_ORDER_ID,
+                                          MET_OFFICE_API_FILE_IDS['cloud'],
+                                          MET_OFFICE_API_USER_SECRET,
+                                          HOME_LON_LAT, 
+                                          'cloud',
+                                          refresh_rate = 3600000)}
 
         # TODO: worth converting to its own LightingPanel widget maybe? could have options for RGB, Temp, cute icon
         slider_test = QtWidgets.QWidget()
@@ -73,9 +103,9 @@ class HomeApp(QtWidgets.QApplication):
                               view_options = {
                                   #"map": (MapView,{}),
                                   "astronomy": (AstronomyView, {"data_manager": self.astro_data_manager, "kiosk_controller": self.kiosk_controller}),
-                                  "weather: precipitation": (WeatherView, {"overlay_type": 'precipitation'}),
-                                  "weather: temperature": (WeatherView, {"overlay_type": 'temperature'}),
-                                  "weather: cloud": (WeatherView, {"overlay_type": 'cloud'}),
+                                  "weather: precipitation": (WeatherView, {"data_manager": self.weather_data_managers['precipitation']}),
+                                  "weather: temperature": (WeatherView, {"data_manager": self.weather_data_managers['temperature']}),
+                                  "weather: cloud": (WeatherView, {"data_manager": self.weather_data_managers['cloud']}),
                                   "strava": (StravaView, {"kiosk_controller": self.kiosk_controller})
                                   },
                                   infobox_options = {
