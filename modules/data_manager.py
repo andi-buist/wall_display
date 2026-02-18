@@ -9,7 +9,7 @@ class DataManager(QtCore.QObject):
     A generic data management object that subscribes to signals to keep an internal entity dictionary updated.
     Can also be set up to do a complete refresh at a scheduled rate (ms).
     '''
-    data_update = QtCore.Signal(dict)  # signal triggered by data refreshing
+    data_update = QtCore.Signal()  # signal triggered by data refreshing
     data_event = QtCore.Signal(dict)  # signal triggered by a heard pubsub event
 
     def __init__(self,
@@ -125,12 +125,12 @@ class HASSDataManager(DataManager):
         # if type is "result", fetched all (direct request from timer)
         if msg_dict.get('type') == "result" and msg_dict.get('id') == self._get_states_id:
             self.data = {x['entity_id']: x for x in msg_dict['result']}
-            self.data_update.emit(self.data)
+            self.data_update.emit()
         # if type is "event", is result of a subscribed state change
         elif msg_dict.get('type') == "event" and msg_dict.get('event', {}).get('event_type') == "state_changed":
             new_state = msg_dict['event']['data']['new_state']
             self.data[new_state['entity_id']] = new_state
-            self.data_update.emit(self.data)
+            self.data_update.emit()
             self.data_event.emit(new_state)
     
     def _send_data_request(self):

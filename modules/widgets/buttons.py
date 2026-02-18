@@ -1,9 +1,15 @@
-from .widget_core import HASSWidget
+from modules.widgets.widget_core import *
 from PySide6.QtWidgets import QPushButton
 
 class HASSEntityButton(HASSWidget):
-    def __init__(self, data_manager, entity_id: str=None, command: callable=None, parent=None): #
-        super().__init__(data_manager, entity_ids=entity_id, parent=parent)
+    def __init__(self, 
+                 data_manager: HASSDataManager,
+                 entity_id: str=None,
+                 command: callable=None,
+                 parent=None): #
+        super().__init__(data_manager, 
+                         entity_ids=entity_id, 
+                         parent=parent)
 
         if not command:
             command = HASSEntityButton.light_switch
@@ -22,7 +28,7 @@ class HASSEntityButton(HASSWidget):
             self.button.setStyleSheet("")
     
     def light_switch(self, entity_id):
-        entity = self.data[entity_id]
+        entity = self.data_manager.data[entity_id]
 
         msg_template = dict(type = "call_service",
                             domain = "light",

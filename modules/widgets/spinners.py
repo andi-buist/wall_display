@@ -184,7 +184,7 @@ class RGBSpinner(HASSWidget):
         rgb = tuple(int(255 * s.value/(s.bits - 1)) for s in self.spinners.values())
         
         for entity_id in self.entity_ids:
-            entity = self.data[entity_id]
+            entity = self.data_manager.data[entity_id]
             adj_rgb = rgb = get_value_adjusted_rgb(rgb, entity['attributes']['brightness'])
 
             #print(get_colour_name(adj_rgb))

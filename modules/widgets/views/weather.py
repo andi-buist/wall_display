@@ -30,10 +30,10 @@ class WeatherView(View):
         self.view_label_info.setAlignment(QtCore.Qt.AlignCenter)
         layout.addWidget(self.view_label_info)
     
-    def _on_data_update(self, entities):
-        self.people = {id: e for id, e in entities.items() if 'person' in id}
+    def _on_data_update(self):
+        self.people = {id: e for id, e in self.data_manager.data.items() if 'person' in id}
         
-        super()._on_data_update(entities) # triggers render() + data_ready
+        super()._on_data_update() # triggers render() + data_ready
     
     def get_latest_data(self):
         # Compute params

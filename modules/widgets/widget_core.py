@@ -1,6 +1,6 @@
 from PySide6 import QtCore, QtWidgets
 from PySide6.QtGui import QImage, QPixmap
-from ..data_manager import HASSDataManager
+from modules.data_manager import *
 import theme
 
 class HASSWidget(QtWidgets.QWidget):
@@ -30,8 +30,6 @@ class HASSWidget(QtWidgets.QWidget):
         self.data_manager.data_update.connect(self._on_data_update)
         self.data_manager.data_event.connect(self._on_data_event)
 
-        self.data = {}
-
         self.error_label = None
 
     # TODO: I think there's quite a lot of redundancy here, partly so we have a generic response to
@@ -39,18 +37,17 @@ class HASSWidget(QtWidgets.QWidget):
     # in the widget at all? surely easier just to fetch the data from the bundled datamanager. we're duping
     # remove this.
 
-    def _on_data_update(self, data):
+    def _on_data_update(self):
         # Filter for relevant data
         if len(self.entity_types) > 0:
-            self.entity_ids = list(set(self.entity_ids + self._get_matching_entity_ids_by_type(data))) # if types specified, get valid ids and merge into entity_ids (unique)
+            self.entity_ids = list(set(self.entity_ids + self._get_matching_entity_ids_by_type(self.data_manager.data))) # if types specified, get valid ids and merge into entity_ids (unique)
 
         relevant = {}
 
         for eid in self.entity_ids:
-            if eid in data:
-                relevant[eid] = data[eid]
+            if eid in self.data_manager.data:
+                relevant[eid] = self.data_manager.data[eid]
 
-        self.data.update(relevant)
         self.on_entities_update(relevant)
 
     def _on_data_event(self, event):

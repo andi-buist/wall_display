@@ -13,27 +13,24 @@ class InfoBox(QtWidgets.QWidget):
                  parent=None):
         super().__init__(parent)
         self.data_manager = data_manager
-        self.latest_data = {}
 
         if kiosk_controller:
             self.kiosk_index = 0
             kiosk_controller.tick.connect(self.on_kiosk_timer_next)
 
-        data_manager.data_update.connect(self.set_data)
-        data_manager.data_event.connect(self.update_single)
+        data_manager.data_update.connect(self._on_data_update)
+        data_manager.data_event.connect(self._on_data_event)
 
         QtCore.QTimer.singleShot(0, self._apply_initial_data_snapshot)
     
     def _apply_initial_data_snapshot(self): 
         if self.data_manager.data: 
-            self.set_data(self.data_manager.data)
+            self._on_data_update(self.data_manager.data)
 
-    def set_data(self, data):
-        self.latest_data = data
+    def _on_data_update(self):
         self.update_ui()
     
-    def update_single(self, entity):
-        self.latest_data[entity['entity_id']] = entity
+    def _on_data_event(self, event):
         self.update_ui()
     
     def kiosk_select_data(self, data: dict, start_unselected: bool = True) -> dict:

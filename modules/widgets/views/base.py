@@ -23,7 +23,6 @@ class View(QtWidgets.QWidget):
                  parent=None):
         super().__init__(parent)
         self.data_manager = data_manager
-        self.latest_data = {}
 
         if kiosk_controller:
             self.kiosk_index = 0
@@ -34,18 +33,13 @@ class View(QtWidgets.QWidget):
         data_manager.data_update.connect(self._on_data_update)
         data_manager.data_event.connect(self._on_data_event)
 
-        QtCore.QTimer.singleShot(0, self._apply_initial_data_snapshot)
+        QtCore.QTimer.singleShot(0, self._on_data_update)
     
     def resizeEvent(self, event):
         super().resizeEvent(event)
         self.render()
-    
-    def _apply_initial_data_snapshot(self): 
-        if self.data_manager.data: 
-            self._on_data_update(self.data_manager.data)
 
-    def _on_data_update(self, data):
-        self.latest_data = data
+    def _on_data_update(self):
         self.render()
 
     def _on_data_event(self, entity):

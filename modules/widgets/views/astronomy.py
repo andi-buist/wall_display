@@ -32,9 +32,9 @@ class AstronomyView(View):
         self.focus_button.clicked.connect(self.toggle_focus)
         layout.addWidget(self.focus_button)
 
-    def _on_data_update(self, entities):
-        self.people = {id: e for id, e in entities.items() if 'person' in id}
-        super()._on_data_update(entities) # triggers render() + data_ready
+    def _on_data_update(self):
+        self.people = {id: e for id, e in self.data_manager.data.items() if 'person' in id}
+        super()._on_data_update() # triggers render() + data_ready
     
     def get_latest_data(self):
         # Determine focus
