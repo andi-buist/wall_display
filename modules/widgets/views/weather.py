@@ -34,8 +34,7 @@ class WeatherView(View):
     
     def get_latest_data(self):
         # Compute params
-        plot_params = get_map_traits(lon_lat = [self.data_manager.lon_lat],
-                                            scale = 2.25)
+        plot_params = get_map_traits(lon_lat = [self.data_manager.lon_lat], zoom = 1/1000)
         
         return {
             "plot_params": plot_params,
@@ -71,7 +70,7 @@ class WeatherView(View):
         self.label_size = int(min(self.view_label.width(), self.view_label.height()))
         
         plot_params = latest_data['plot_params']
-        map_bg = get_map_image(self.label_size, plot_params['extent'], plot_params['aspect'], 128, 1)
+        map_bg = get_map_image(self.label_size, plot_params, 128, 1)
 
         fig, ax = plt_make(plot_params['extent'])
         ax.imshow(map_bg, extent = plot_params['extent'])

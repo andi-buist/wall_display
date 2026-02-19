@@ -31,7 +31,7 @@ class AstronomyView(View):
     #TODO: I think this idea needs removing. we shouldn't need to calculate plot params elsewhere and fling them around.
     # we can just rely on self.data_manager.data
     def get_latest_data(self):
-        plot_params = get_map_traits([self.data_manager.lon_lat])
+        plot_params = get_map_traits([self.data_manager.lon_lat], zoom = 1)
         
         # External astronomy data
         astro = get_astronomy_map_data(self.data_manager.data)
@@ -97,9 +97,9 @@ class AstronomyView(View):
 
         lon_lat = plot_params['centre']
         extent = plot_params['extent']
-        horizon_radius = (plot_params['scale']/2)
+        horizon_radius = (min(extent[1]-extent[0], extent[3]-extent[2])/2) * 0.85
         
-        map_bg = get_map_image(self.label_size, plot_params['extent'], plot_params['aspect'], 128, 1)
+        map_bg = get_map_image(self.label_size, plot_params, 128, 1)
         ax.imshow(map_bg, extent=extent)
 
         if len(data) > 0: 

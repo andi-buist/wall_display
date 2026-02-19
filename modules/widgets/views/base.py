@@ -87,14 +87,17 @@ def plt_make(extent: tuple[float,float,float,float] = None):
     return fig, ax
 
 def get_map_image(size: tuple[int, int] | int, 
-                  extent: list, 
-                  aspect: float,
+                  plot_params: dict,
                   brightness: float, 
                   contrast: float) -> Image.Image:
     """
     Creates a dithered, 1-bit map Image at an appropriate zoom level for a given extent
     """
-    match math.floor(math.log2(aspect)):
+
+    extent = plot_params['extent']
+    min_axis_size = plot_params['min_axis_size']
+
+    match math.floor(math.log2(max(extent[1]-extent[0], extent[3]-extent[2])/min_axis_size)):
         case 0: _zoom_level = 17
         case 1: _zoom_level = 16
         case 2: _zoom_level = 15
@@ -142,16 +145,15 @@ def get_map_image(size: tuple[int, int] | int,
     return map_bg
 
 def get_map_traits(lon_lat: list[tuple[float,float]],
-                   buffer_amount: float = 0.1,
-                   scale: float = None,
-                   min_dimension: float = 0.0015) -> dict:
+                   zoom: float = 1,
+                   buffer_scale: float = 0.1,
+                   min_axis_size: float = 0.0015) -> dict:
     """
     For given input points (and optional args), return:
-    extent + proportional margin;
+    extent + proportional buffer;
     centre;
-    axis lengths;
-    proportional margin;
-
+    proportional buffer;
+    minimum axis size;
     """
     lon_values = [x[0] for x in lon_lat]
     lat_values = [x[1] for x in lon_lat]
@@ -164,22 +166,22 @@ def get_map_traits(lon_lat: list[tuple[float,float]],
                         min(lat_values) + (lon_lat_diff[1]/2))
     
     # the maximum x or y distance between all points
-    if not scale:
-        scale = max(max(lon_lat_diff), min_dimension) # don't zoom in past target
+    axis_size = max(*lon_lat_diff , min_axis_size) / zoom
+    if zoom > 1:
+        min_axis_size = min_axis_size / zoom
 
     #  buffer proportional to the input point spread
-    extent_buffer = scale * buffer_amount
+    extent_buffer = axis_size * buffer_scale
 
     return {"extent": (
-        lon_lat_centre[0] - (scale/2) - extent_buffer,
-        lon_lat_centre[0] + (scale/2) + extent_buffer,
-        lon_lat_centre[1] - (scale/2) - extent_buffer,
-        lon_lat_centre[1] + (scale/2) + extent_buffer
+        lon_lat_centre[0] - (axis_size/2) - extent_buffer,
+        lon_lat_centre[0] + (axis_size/2) + extent_buffer,
+        lon_lat_centre[1] - (axis_size/2) - extent_buffer,
+        lon_lat_centre[1] + (axis_size/2) + extent_buffer
         ),
         "centre": lon_lat_centre,
         "buffer": extent_buffer,
-        "scale": scale,
-        "aspect": scale/min_dimension
+        "min_axis_size": min_axis_size
         }
 
 def snap_labels(label_list: list[dict], grouping_threshold: float = 0.1) -> list[dict]:
