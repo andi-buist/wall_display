@@ -34,8 +34,8 @@ class WeatherView(View):
     
     def get_latest_data(self):
         # Compute params
-        plot_params = calculate_plot_params(lon_lat = [self.data_manager.lon_lat],
-                                            extent_dimension = 2.25)
+        plot_params = get_map_traits(lon_lat = [self.data_manager.lon_lat],
+                                            scale = 2.25)
         
         return {
             "plot_params": plot_params,
@@ -54,7 +54,7 @@ class WeatherView(View):
             return
         
         try: 
-            image = self.render_visuals(latest_data)
+            image = self.generate_plot_vis(latest_data)
             pixmap = image_to_formatted_pixmap(image, self.label_size)
             self.view_label.setPixmap(pixmap)
             self.view_label_info.clear()
@@ -64,14 +64,14 @@ class WeatherView(View):
             self.view_label.setPixmap(pixmap)
             self.view_label_info.setText(str(e))
 
-    def render_visuals(self, latest_data: dict) -> Image.Image:
+    def generate_plot_vis(self, latest_data: dict) -> Image.Image:
         # map plot setup ----
         plt.rcParams['font.family'] = "Nintendo DS BIOS"
 
         self.label_size = int(min(self.view_label.width(), self.view_label.height()))
         
         plot_params = latest_data['plot_params']
-        map_bg = get_map_image(self.label_size, plot_params['extent'], plot_params['dimension'], plot_params['min_dimension'], 128, 1)
+        map_bg = get_map_image(self.label_size, plot_params['extent'], plot_params['aspect'], 128, 1)
 
         fig, ax = plt_make(plot_params['extent'])
         ax.imshow(map_bg, extent = plot_params['extent'])

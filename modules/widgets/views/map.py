@@ -59,7 +59,7 @@ class MapView(View):
         for entity in self.people_filtered.values():
             coords.extend(self.people_movement_data[entity['entity_id']].values())
 
-        plot_params = calculate_plot_params(coords)
+        plot_params = get_map_traits(coords)
         
         return {
             "plot_params": plot_params
@@ -91,7 +91,7 @@ class MapView(View):
             return
         
         try: 
-            image = self.render_visuals(latest_data)
+            image = self.generate_plot_vis(latest_data)
             pixmap = image_to_formatted_pixmap(image, self.label_size)
             self.view_label.setPixmap(pixmap)
             self.view_label_info.clear()
@@ -101,7 +101,7 @@ class MapView(View):
             self.view_label.setPixmap(pixmap)
             self.view_label_info.setText(str(e))
 
-    def render_visuals(self, latest_data: dict) -> Image.Image:
+    def generate_plot_vis(self, latest_data: dict) -> Image.Image:
         # map plot setup ----
         plt.rcParams['font.family'] = "Nintendo DS BIOS"
         
@@ -114,7 +114,7 @@ class MapView(View):
 
         fig, ax = plt_make(plot_params['extent'])
         
-        map_bg = get_map_image(self.label_size, plot_params['extent'], plot_params['dimension'], plot_params['min_dimension'], 128, 1)
+        map_bg = get_map_image(self.label_size, plot_params['extent'], plot_params['aspect'], 128, 1)
         ax.imshow(map_bg, extent = plot_params['extent'])
 
         label_store = self.plt_add_zones(ax, -plot_params['buffer'], label_store)

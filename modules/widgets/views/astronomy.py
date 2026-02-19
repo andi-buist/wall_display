@@ -31,7 +31,7 @@ class AstronomyView(View):
     #TODO: I think this idea needs removing. we shouldn't need to calculate plot params elsewhere and fling them around.
     # we can just rely on self.data_manager.data
     def get_latest_data(self):
-        plot_params = calculate_plot_params([self.data_manager.lon_lat])
+        plot_params = get_map_traits([self.data_manager.lon_lat])
         
         # External astronomy data
         astro = get_astronomy_map_data(self.data_manager.data)
@@ -54,7 +54,7 @@ class AstronomyView(View):
             return
         
         try: 
-            image = self.render_visuals(latest_data)
+            image = self.generate_plot_vis(latest_data)
             pixmap = image_to_formatted_pixmap(image, self.label_size)
             self.view_label.setPixmap(pixmap)
             self.view_label_info.clear()
@@ -64,7 +64,7 @@ class AstronomyView(View):
             self.view_label.setPixmap(pixmap)
             self.view_label_info.setText(str(e))
 
-    def render_visuals(self, latest_data: dict) -> Image.Image:
+    def generate_plot_vis(self, latest_data: dict) -> Image.Image:
         # map plot setup ----
         plt.rcParams['font.family'] = "Nintendo DS BIOS"
         
@@ -97,16 +97,16 @@ class AstronomyView(View):
 
         lon_lat = plot_params['centre']
         extent = plot_params['extent']
-        max_radius = (plot_params['dimension']/2) + (plot_params['buffer']/2)
+        horizon_radius = (plot_params['scale']/2)
         
-        map_bg = get_map_image(self.label_size, plot_params['extent'], plot_params['dimension'], plot_params['min_dimension'], 128, 1)
+        map_bg = get_map_image(self.label_size, plot_params['extent'], plot_params['aspect'], 128, 1)
         ax.imshow(map_bg, extent=extent)
 
         if len(data) > 0: 
             # plot crosshair
             ax.axvline(x = lon_lat[0], color = "#000000")
             ax.axhline(y = lon_lat[1], color = "#000000")
-            ax.add_patch(patches.Circle(lon_lat, max_radius, edgecolor = "#000000", facecolor = "none"))
+            ax.add_patch(patches.Circle(lon_lat, horizon_radius, edgecolor = "#000000", facecolor = "none"))
 
             legend_text = ""
 
@@ -115,8 +115,8 @@ class AstronomyView(View):
             for key, value in data['data'].items():
 
                 # screen space coordinates
-                position_conversion = alt_az_to_viewport(value['position'], lon_lat, extent, max_radius)
-                history_conversion = [alt_az_to_viewport(position, lon_lat, extent, max_radius) for position in value['history']]
+                position_conversion = alt_az_to_viewport(value['position'], lon_lat, extent, horizon_radius)
+                history_conversion = [alt_az_to_viewport(position, lon_lat, extent, horizon_radius) for position in value['history']]
 
                 if not data["kiosk_selected"]:
                     is_focus = False
@@ -235,10 +235,10 @@ def get_astronomy_map_data(astro_data:list) -> dict:
                     data[body_id]["icon"] = plt.imread(theme.filestore['ui']['icons']['astro'][body_id])
         return {"data": data, "kiosk_selected": None}
 
-def alt_az_to_viewport(alt_az: tuple, lon_lat: tuple, extent: list, max_radius: float) -> tuple[int,int]:
+def alt_az_to_viewport(alt_az: tuple, lon_lat: tuple, extent: list, radius: float) -> tuple[int,int]:
         #convert to lon lat at origin where circle bounds viewport square
         conversion = [math.sin(alt_az[1]), math.cos(alt_az[1])] 
-        conversion = [x * (1 - (alt_az[0]/math.radians(90))) * max_radius for x in conversion]
+        conversion = [x * (1 - (alt_az[0]/math.radians(90))) * radius for x in conversion]
 
         #move from origin to viewport centre
         conversion = [sum(x) for x in zip(lon_lat, conversion)]

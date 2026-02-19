@@ -30,7 +30,7 @@ class StravaView(View):
         data = get_strava_map_data(period = (datetime.datetime.today() - datetime.timedelta(days=30), datetime.datetime.now()))
         data = self.kiosk_select_data(data, start_unselected=False)
 
-        plot_params = calculate_plot_params(data['data'][data['kiosk_selected']]['polyline'])
+        plot_params = get_map_traits(data['data'][data['kiosk_selected']]['polyline'])
 
         return {
             "plot_params": plot_params,
@@ -49,7 +49,7 @@ class StravaView(View):
             return
         
         try: 
-            image = self.render_visuals(latest_data)
+            image = self.generate_plot_vis(latest_data)
             pixmap = image_to_formatted_pixmap(image, self.label_size)
             self.view_label.setPixmap(pixmap)
             
@@ -63,7 +63,7 @@ class StravaView(View):
             self.view_label.setPixmap(pixmap)
             self.view_label_info.setText(str(e))
 
-    def render_visuals(self, latest_data: dict) -> Image.Image:
+    def generate_plot_vis(self, latest_data: dict) -> Image.Image:
         # map plot setup ----
         plt.rcParams['font.family'] = "Nintendo DS BIOS"
 
@@ -74,7 +74,7 @@ class StravaView(View):
 
         plot_params = latest_data['plot_params']
 
-        map_bg =  get_map_image(self.label_size, plot_params['extent'], plot_params['dimension'], plot_params['min_dimension'], 128, 1)
+        map_bg =  get_map_image(self.label_size, plot_params['extent'], plot_params['aspect'], 128, 1)
 
         fig, ax = plt_make(plot_params['extent'])
         ax.imshow(map_bg, extent = plot_params['extent'])

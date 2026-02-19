@@ -76,6 +76,9 @@ class View(QtWidgets.QWidget):
         pass
     
 def plt_make(extent: tuple[float,float,float,float] = None):
+    """
+    Generates a matplotlib.fig, ax without axes & with axis limits se tto the required extent range
+    """
     fig, ax = plt.subplots(figsize = (8,8))
     plt.axis('off')
     if extent:
@@ -83,8 +86,15 @@ def plt_make(extent: tuple[float,float,float,float] = None):
         ax.set_ylim(extent[2], extent[3])
     return fig, ax
 
-def get_map_image(size: int, extent: list, aspect: float, min_aspect: float, brightness: float, contrast: float) -> Image.Image:
-    match math.floor(math.log2(aspect / min_aspect)):
+def get_map_image(size: tuple[int, int] | int, 
+                  extent: list, 
+                  aspect: float,
+                  brightness: float, 
+                  contrast: float) -> Image.Image:
+    """
+    Creates a dithered, 1-bit map Image at an appropriate zoom level for a given extent
+    """
+    match math.floor(math.log2(aspect)):
         case 0: _zoom_level = 17
         case 1: _zoom_level = 16
         case 2: _zoom_level = 15
@@ -119,36 +129,57 @@ def get_map_image(size: int, extent: list, aspect: float, min_aspect: float, bri
 
     #open as image, resize
     map_bg = Image.open(buffer)
-    map_bg = map_bg.resize((size, size), resample= Image.Resampling.NEAREST)
+
+    match size:
+        case int():
+            map_bg = map_bg.resize((size, size), resample= Image.Resampling.NEAREST)
+        case tuple():
+            map_bg = map_bg.resize(size, resample= Image.Resampling.NEAREST)
+
 
     #pull up brightness by mapping [0,255] -> [n,255]
     map_bg = ImageEnhance.Contrast(Image.merge(map_bg.mode, [x.point(lambda i: i + ((1 - (i/255)) * brightness)) for x in map_bg.split()])).enhance(contrast)
     return map_bg
 
-def calculate_plot_params(lon_lat: list[tuple[float,float]], buffer_amount: float = 0.1, extent_dimension: float = None, min_dimension: float = 0.0015) -> dict:
+def get_map_traits(lon_lat: list[tuple[float,float]],
+                   buffer_amount: float = 0.1,
+                   scale: float = None,
+                   min_dimension: float = 0.0015) -> dict:
+    """
+    For given input points (and optional args), return:
+    extent + proportional margin;
+    centre;
+    axis lengths;
+    proportional margin;
+
+    """
     lon_values = [x[0] for x in lon_lat]
     lat_values = [x[1] for x in lon_lat]
     
-    lonlat_diff = (max(lon_values) - min(lon_values),
+    # calculate the maximum pair distance in x and y
+    lon_lat_diff = (max(lon_values) - min(lon_values),
                     max(lat_values) - min(lat_values))
-    lonlat_centre = (min(lon_values) + (lonlat_diff[0]/2),
-                        min(lat_values) + (lonlat_diff[1]/2))
+    # centre of lon_lat bounding rect
+    lon_lat_centre = (min(lon_values) + (lon_lat_diff[0]/2),
+                        min(lat_values) + (lon_lat_diff[1]/2))
     
-    if not extent_dimension:
-        extent_dimension = max(max(lonlat_diff), min_dimension) # don't zoom in past target
+    # the maximum x or y distance between all points
+    if not scale:
+        scale = max(max(lon_lat_diff), min_dimension) # don't zoom in past target
 
-    extent_buffer = extent_dimension * buffer_amount
+    #  buffer proportional to the input point spread
+    extent_buffer = scale * buffer_amount
 
     return {"extent": (
-        lonlat_centre[0] - (extent_dimension/2) - extent_buffer,
-        lonlat_centre[0] + (extent_dimension/2) + extent_buffer,
-        lonlat_centre[1] - (extent_dimension/2) - extent_buffer,
-        lonlat_centre[1] + (extent_dimension/2) + extent_buffer
+        lon_lat_centre[0] - (scale/2) - extent_buffer,
+        lon_lat_centre[0] + (scale/2) + extent_buffer,
+        lon_lat_centre[1] - (scale/2) - extent_buffer,
+        lon_lat_centre[1] + (scale/2) + extent_buffer
         ),
-        "centre": lonlat_centre,
+        "centre": lon_lat_centre,
         "buffer": extent_buffer,
-        "dimension": extent_dimension,
-        "min_dimension": min_dimension
+        "scale": scale,
+        "aspect": scale/min_dimension
         }
 
 def snap_labels(label_list: list[dict], grouping_threshold: float = 0.1) -> list[dict]:

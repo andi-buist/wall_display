@@ -104,9 +104,3 @@ def get_strava_data(period: tuple[datetime.datetime, datetime.datetime] = (datet
         data = last_cache
 
     return data
-
-def nostdout():
-    save_stdout = sys.stdout
-    sys.stdout = BytesIO()
-    yield
-    sys.stdout = save_stdout

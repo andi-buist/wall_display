@@ -16,6 +16,14 @@ import xarray as xr
 import os
 import numpy as np
 
+#Strava
+import stravalib
+from stravalib.model import DetailedActivity
+from pathlib import Path
+import polyline
+import contextlib
+import sys
+
 class DataManager(QtCore.QObject):
     '''
     A generic data management object that subscribes to signals to keep an internal entity dictionary updated.
@@ -289,4 +297,8 @@ class MetOfficeDataManager(APIDataManager):
                      "value_range": value_range,
                      "timestamp": datetime.datetime.now()}
         self.data_update.emit()
+
+class StravaDataManager(APIDataManager):
+    def __init__(self):
+        self.client = stravalib.Client()
         
