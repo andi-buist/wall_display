@@ -29,6 +29,9 @@ MET_OFFICE_API_ORDER_ID = token_config['met_office_atmospheric_models_config']['
 MET_OFFICE_API_FILE_IDS = token_config['met_office_atmospheric_models_config']['file_id']
 MET_OFFICE_API_USER_SECRET = token_config['met_office_atmospheric_models_config']['secret']
 
+STRAVA_API_CLIENT_ID = token_config['strava_config']['client_id']
+STRAVA_API_CLIENT_SECRET = token_config['strava_config']['client_secret']
+STRAVA_API_REFRESH_TOKEN = token_config['strava_config']['refresh_token']
 
 class HomeApp(QtWidgets.QApplication):
     def __init__(self, resolution: tuple[int] = (800,480)):
@@ -82,6 +85,10 @@ class HomeApp(QtWidgets.QApplication):
                                           HOME_LON_LAT, 
                                           'cloud',
                                           refresh_rate = 3600000)}
+        self.strava_data_manager = StravaDataManager(STRAVA_API_CLIENT_ID,
+                                                     STRAVA_API_CLIENT_SECRET,
+                                                     STRAVA_API_REFRESH_TOKEN,
+                                                     refresh_rate=3600000)
 
         # TODO: worth converting to its own LightingPanel widget maybe? could have options for RGB, Temp, cute icon
         slider_test = QtWidgets.QWidget()
@@ -106,10 +113,10 @@ class HomeApp(QtWidgets.QApplication):
                                   "weather: precipitation": (WeatherView, {"data_manager": self.weather_data_managers['precipitation']}),
                                   "weather: temperature": (WeatherView, {"data_manager": self.weather_data_managers['temperature']}),
                                   "weather: cloud": (WeatherView, {"data_manager": self.weather_data_managers['cloud']}),
-                                  "strava": (StravaView, {"kiosk_controller": self.kiosk_controller})
+                                  "strava": (StravaView, {"data_manager": self.strava_data_manager, "kiosk_controller": self.kiosk_controller})
                                   },
                                   infobox_options = {
-                                    "strava": (StravaInfoBox, {"kiosk_controller": self.kiosk_controller})
+                                    "strava": (StravaInfoBox, {"data_manager": self.strava_data_manager, "kiosk_controller": self.kiosk_controller})
                                   }
                                   )},
             {'label': "Terminal",

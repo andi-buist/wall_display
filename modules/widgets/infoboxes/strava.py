@@ -7,11 +7,10 @@ import textwrap
 
 import theme
 from modules.widgets.views.base import get_map_traits
-from modules.widgets.views.strava import get_strava_map_data
 
 
 class StravaInfoBox(InfoBox): 
-    def __init__(self, data_manager: DataManager, kiosk_controller: KioskController, parent=None): 
+    def __init__(self, data_manager: StravaDataManager, kiosk_controller: KioskController, parent=None): 
         super().__init__(data_manager, kiosk_controller, parent)
         self.layout: QtWidgets.QVBoxLayout = QtWidgets.QVBoxLayout()
         self.setLayout(self.layout)
@@ -19,7 +18,7 @@ class StravaInfoBox(InfoBox):
         self.achievement_count: int = 0
     
     def get_latest_data(self):
-        data = get_strava_map_data(period = (datetime.datetime.today() - datetime.timedelta(days=30), datetime.datetime.now()))
+        data = self.data_manager.data
         data = self.kiosk_select_data(data, start_unselected=False)
 
         plot_params = get_map_traits(data['data'][data['kiosk_selected']]['polyline'])

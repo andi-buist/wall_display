@@ -7,7 +7,7 @@ import matplotlib.pyplot as plt
 from matplotlib.offsetbox import OffsetImage, AnnotationBbox
 
 class StravaView(View):
-    def __init__(self, data_manager: DataManager, kiosk_controller: KioskController, parent=None):
+    def __init__(self, data_manager: StravaDataManager, kiosk_controller: KioskController, parent=None):
         super().__init__(data_manager, kiosk_controller, parent)
         layout = QtWidgets.QVBoxLayout()
         self.setLayout(layout)
@@ -27,7 +27,7 @@ class StravaView(View):
         super()._on_data_update()
 
     def get_latest_data(self):
-        data = get_strava_map_data(period = (datetime.datetime.today() - datetime.timedelta(days=30), datetime.datetime.now()))
+        data = self.data_manager.data
         data = self.kiosk_select_data(data, start_unselected=False)
 
         plot_params = get_map_traits(data['data'][data['kiosk_selected']]['polyline'])
@@ -90,16 +90,6 @@ class StravaView(View):
         image = image.convert('1')
 
         return image
-    
-def get_strava_map_data(type: str = None,
-                        period: tuple[datetime.datetime, datetime.datetime] = (datetime.datetime.today() - datetime.timedelta(days = 30), datetime.datetime.now()),
-                        cache_frequency: datetime.timedelta = datetime.timedelta(hours=1),
-                        cache_filepath: Path = Path("./data/strava_data_cache.json")) -> dict:
-    data = get_strava_data(period = period, cache_frequency = cache_frequency, cache_filepath=cache_filepath)
-
-    for key, value in data['data'].items():
-        data['data'][key]['start_date'] = datetime.datetime.fromtimestamp(value['start_date'])
-    return data
 
 def plt_add_strava_view(ax: plt.Axes, data: dict) -> None:
     if len(data['polyline']) > 0:

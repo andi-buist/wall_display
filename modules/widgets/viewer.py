@@ -58,22 +58,24 @@ class Viewer(QtWidgets.QWidget):
         layout.addLayout(button_layout)
 
         # left panel
-        self.view_panel_left = QtWidgets.QWidget()
-        self.view_panel_left.setSizePolicy(QtWidgets.QSizePolicy.Policy.Minimum, QtWidgets.QSizePolicy.Policy.Expanding)
-
         self.view_panel_left_layout = QtWidgets.QVBoxLayout()
         self.view_panel_left_layout.setAlignment(QtCore.Qt.AlignCenter)
-        self.view_panel_left.setLayout(self.view_panel_left_layout)
-        view_layout.addWidget(self.view_panel_left)
+        view_layout.addLayout(self.view_panel_left_layout)
 
-        # right panel (viewer)
-        self.view_panel_right = QtWidgets.QWidget()
-        self.view_panel_right.setSizePolicy(QtWidgets.QSizePolicy.Policy.Expanding, QtWidgets.QSizePolicy.Policy.Expanding)
 
+        self.view_panel_left = QtWidgets.QWidget()
+        self.view_panel_left.setSizePolicy(QtWidgets.QSizePolicy.Policy.Minimum, QtWidgets.QSizePolicy.Policy.Expanding)
+        self.view_panel_left_layout.addWidget(self.view_panel_left)
+
+        # right panel
         self.view_panel_right_layout = QtWidgets.QVBoxLayout()
         self.view_panel_right_layout.setAlignment(QtCore.Qt.AlignCenter)
-        self.view_panel_right.setLayout(self.view_panel_right_layout)
-        view_layout.addWidget(self.view_panel_right)
+        view_layout.addLayout(self.view_panel_right_layout)
+
+
+        self.view_panel_right = QtWidgets.QWidget()
+        self.view_panel_right.setSizePolicy(QtWidgets.QSizePolicy.Policy.Expanding, QtWidgets.QSizePolicy.Policy.Expanding)
+        self.view_panel_right_layout.addWidget(self.view_panel_left)
 
         self.view_button = QtWidgets.QPushButton("View: Map")
         self.view_button.clicked.connect(self.toggle_view)
@@ -98,13 +100,13 @@ class Viewer(QtWidgets.QWidget):
         # add infobox if needed
         if self.view_choice in self.infobox_options.keys():
             cls, kwargs = self.infobox_options[self.view_choice]
-            self.infobox = cls(parent = self.view_panel_left, **kwargs)
+            self.infobox = cls(parent = None, **kwargs)
             self.view_panel_left_layout.addWidget(self.infobox)
         
         # add view if needed
         if self.view_choice in self.view_options.keys():
             cls, kwargs = self.view_options[self.view_choice]
-            self.view = cls(parent = self.view_panel_right, **kwargs)
+            self.view = cls(parent = None, **kwargs)
             self.view_panel_right_layout.addWidget(self.view)
     
     def clear_panels(self):

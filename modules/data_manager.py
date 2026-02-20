@@ -298,7 +298,67 @@ class MetOfficeDataManager(APIDataManager):
                      "timestamp": datetime.datetime.now()}
         self.data_update.emit()
 
-class StravaDataManager(APIDataManager):
-    def __init__(self):
-        self.client = stravalib.Client()
+class StravaDataManager(DataManager):
+    def __init__(self,
+                 api_client_id: str,
+                 api_client_secret: str,
+                 api_refresh_token: str,
+                 period: tuple[datetime.datetime, datetime.datetime] = (datetime.datetime.today() - datetime.timedelta(days = 30), datetime.datetime.now()), 
+                 refresh_rate: int = None):
         
+        with contextlib.redirect_stdout(None) and contextlib.redirect_stderr(None):
+            self.client = stravalib.Client(rate_limit_requests = False)
+
+        self.api_client_id = api_client_id
+        self.api_client_secret = api_client_secret
+        self.api_refresh_token = api_refresh_token
+
+        self.period = period
+
+        self.set_access_token()
+
+        super().__init__(refresh_rate = refresh_rate,
+                         connection_type = 'api')
+    
+    def set_access_token(self):
+        with contextlib.redirect_stdout(None) and contextlib.redirect_stderr(None):
+            init_response = self.client.refresh_access_token(client_id = self.api_client_id,
+                                                             client_secret = self.api_client_secret,
+                                                             refresh_token = self.api_refresh_token)
+        
+        self.client.access_token = init_response['access_token']
+        self.client.token_expires = init_response['expires_at']
+        self.api_refresh_token = init_response['refresh_token']
+    
+    def _send_data_request(self):
+        print(str(self) + " refreshing all data")
+
+        activities = self.client.get_activities(after = self.period[0], before = self.period[1])
+
+        detailed_activities: list[DetailedActivity] = []
+        for activity in activities:
+            detailed_activity = self.client.get_activity(activity.id)
+            detailed_activities.append(detailed_activity)
+
+        data = {"type": None, "datetime": datetime.datetime.now().timestamp(), "data": {}}
+        for detailed_activity in detailed_activities:
+            activity_dict = {}
+            activity_dict["start_date"] = detailed_activity.start_date
+            activity_dict["distance"] = detailed_activity.distance
+            activity_dict["polyline"] = [(x[1],x[0]) for x in polyline.polyline.decode(detailed_activity.map.polyline)] # need to flip to lon_lat
+            activity_dict["start_point"] = tuple(reversed(detailed_activity.start_latlng.root))
+            activity_dict["end_point"] = tuple(reversed(detailed_activity.end_latlng.root))
+            activity_dict["calories"] = detailed_activity.calories
+            activity_dict["average_heartrate"] = detailed_activity.average_heartrate
+            activity_dict["achievements"] = {}
+            for effort in detailed_activity.segment_efforts:
+                achievements: list[dict] = []
+                for achievement in effort.achievements:
+                    achievements.append({"rank": achievement.rank, "type": achievement.type})
+                activity_dict["achievements"][effort.id] = {"name": effort.name, "achievements": achievements}
+            
+
+            data['data'][str(detailed_activity.id)] = activity_dict
+        
+        self.data = data
+        self.data_update.emit()
