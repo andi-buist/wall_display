@@ -75,7 +75,7 @@ class View(QtWidgets.QWidget):
         print(f"{self} is still using the base.py render() function. Are you sure your subclass is set up correctly?")
         pass
     
-def plt_make(extent: tuple[float,float,float,float] = None):
+def map_plot_make(extent: tuple[float,float,float,float] = None):
     """
     Generates a matplotlib.fig, ax without axes & with axis limits se tto the required extent range
     """
@@ -220,8 +220,14 @@ def snap_labels(label_list: list[dict], grouping_threshold: float = 0.1) -> list
     output_label_list = [x for idx, x in enumerate(label_list) if idx not in labels_to_remove]
     return output_label_list + new_labels
 
-def image_to_formatted_pixmap(image: Image.Image, size: int) -> QPixmap:
-    image = image.resize((size, size), resample= Image.Resampling.NEAREST)
+def image_to_formatted_pixmap(image: Image.Image, size: tuple[int,int] | int) -> QPixmap:
+    # if int, implicit 1:1 aspect ratio
+    match size:
+        case int():
+            image = image.resize((size, size), resample= Image.Resampling.NEAREST)
+        case tuple():
+            image = image.resize(size, resample= Image.Resampling.NEAREST)
+            
     image = image.convert('1')
     
     # add 1px border in image

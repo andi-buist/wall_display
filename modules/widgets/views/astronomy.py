@@ -59,7 +59,7 @@ class AstronomyView(View):
         # map plot setup ----
         plt.rcParams['font.family'] = "Nintendo DS BIOS"
 
-        fig, ax = plt_make(plot_params['extent'])
+        fig, ax = map_plot_make(plot_params['extent'])
 
         lon_lat = plot_params['centre']
         extent = plot_params['extent']

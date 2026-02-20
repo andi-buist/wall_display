@@ -112,7 +112,7 @@ class MapView(View):
         
         plot_params = latest_data['plot_params']
 
-        fig, ax = plt_make(plot_params['extent'])
+        fig, ax = map_plot_make(plot_params['extent'])
         
         map_bg = get_map_image(self.label_size, plot_params, 128, 1)
         ax.imshow(map_bg, extent = plot_params['extent'])

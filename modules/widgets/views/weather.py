@@ -2,7 +2,7 @@ from modules.widgets.views.base import *
 from PySide6 import QtWidgets
 
 from io import BytesIO
-from PIL import Image, ImageFilter, ImageChops
+from PIL import Image, ImageFilter, ImageChops, ImageDraw
 import matplotlib.pyplot as plt
 from adjustText import adjust_text
 from typing import Literal
@@ -33,10 +33,10 @@ class WeatherView(View):
         self.view_label_info.setAlignment(QtCore.Qt.AlignCenter)
         v_layout.addWidget(self.view_label_info)
 
-        legend_gauge = QtWidgets.QLabel()
-        legend_gauge.setFixedWidth(64)
-        legend_gauge.setSizePolicy(QtWidgets.QSizePolicy.Policy.Minimum, QtWidgets.QSizePolicy.Policy.Expanding)
-        layout.addWidget(legend_gauge)
+        self.legend_gauge = QtWidgets.QLabel()
+        self.legend_gauge.setFixedWidth(64)
+        self.legend_gauge.setSizePolicy(QtWidgets.QSizePolicy.Policy.Minimum, QtWidgets.QSizePolicy.Policy.Expanding)
+        layout.addWidget(self.legend_gauge)
 
     def _on_data_update(self):
         super()._on_data_update() # triggers render() + data_ready
@@ -59,6 +59,10 @@ class WeatherView(View):
             view_label_pixmap = image_to_formatted_pixmap(view_label_image, self.label_size)
             self.view_label.setPixmap(view_label_pixmap)
             self.view_label_info.clear()
+            
+            legend_gauge_image = self.generate_met_office_legend(data, plot_params)
+            legend_gauge_pixmap = image_to_formatted_pixmap(legend_gauge_image, (32,256))
+            self.legend_gauge.setPixmap(legend_gauge_pixmap)
         except Exception as e: 
             fallback = Image.open(theme.filestore['ui']['img']['bug'])
             view_label_pixmap = image_to_formatted_pixmap(fallback, self.label_size)
@@ -75,7 +79,7 @@ class WeatherView(View):
         map_bg = get_map_image(self.label_size, plot_params, 128, 1)
         map_bg = ImageChops.multiply(map_bg, map_bg.filter(ImageFilter.CONTOUR)) # enhance borders
 
-        fig, ax = plt_make(plot_params['extent'])
+        fig, ax = map_plot_make(plot_params['extent'])
         ax.imshow(map_bg, extent = plot_params['extent'])
         
         im: Image.Image = data['image'].convert('L')
@@ -190,6 +194,17 @@ class WeatherView(View):
 
         image = Image.open(image_buffer)
         image = image.resize((self.label_size, self.label_size), resample= Image.Resampling.NEAREST)
-        image = image.convert('1')
 
         return image
+    
+    def generate_met_office_legend(self,
+                                   data: dict,
+                                   plot_params: dict):
+        steps = 256
+        match self.data_manager.model_type:
+            case 'precipitation':
+                legend_image = Image.fromarray(np.array([[x] for x in range(0, steps)]).astype(np.uint8))
+            case _:
+                legend_image = Image.fromarray(np.flip(np.array([[x] for x in range(0, steps)]).astype(np.uint8)))
+        
+        return legend_image
