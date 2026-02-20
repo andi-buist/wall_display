@@ -15,20 +15,29 @@ class WeatherView(View):
                  parent = None):
         super().__init__(data_manager, parent = parent)
 
-        layout = QtWidgets.QVBoxLayout()
+        layout = QtWidgets.QHBoxLayout()
         self.setLayout(layout)
+
+        # view, info
+        v_layout = QtWidgets.QVBoxLayout()
+        layout.addLayout(v_layout)
 
         # view label
         self.view_label = QtWidgets.QLabel()
         self.view_label.setAlignment(QtCore.Qt.AlignCenter)
         self.view_label.setSizePolicy(QtWidgets.QSizePolicy.Policy.Expanding, QtWidgets.QSizePolicy.Policy.Expanding)
-        layout.addWidget(self.view_label)
+        v_layout.addWidget(self.view_label)
 
         # label below viewer (text etc)
         self.view_label_info = QtWidgets.QLabel()
         self.view_label_info.setAlignment(QtCore.Qt.AlignCenter)
-        layout.addWidget(self.view_label_info)
-    
+        v_layout.addWidget(self.view_label_info)
+
+        legend_gauge = QtWidgets.QLabel()
+        legend_gauge.setFixedWidth(64)
+        legend_gauge.setSizePolicy(QtWidgets.QSizePolicy.Policy.Minimum, QtWidgets.QSizePolicy.Policy.Expanding)
+        layout.addWidget(legend_gauge)
+
     def _on_data_update(self):
         super()._on_data_update() # triggers render() + data_ready
     
@@ -45,19 +54,20 @@ class WeatherView(View):
             self.view_label.setText("Loading...")
             return
         
-        # try: 
-        image = self.generate_plot_vis(data, plot_params)
-        pixmap = image_to_formatted_pixmap(image, self.label_size)
-        self.view_label.setPixmap(pixmap)
-        self.view_label_info.clear()
-        # except Exception as e: 
-        #     fallback = Image.open(theme.filestore['ui']['img']['bug'])
-        #     pixmap = image_to_formatted_pixmap(fallback, self.label_size)
-        #     self.view_label.setPixmap(pixmap)
-        #     self.view_label_info.setText(str(e))
-
-    def generate_plot_vis(self, data: dict, plot_params: dict) -> Image.Image:
-        # map plot setup ----
+        try: 
+            view_label_image = self.generate_met_office_image(data, plot_params)
+            view_label_pixmap = image_to_formatted_pixmap(view_label_image, self.label_size)
+            self.view_label.setPixmap(view_label_pixmap)
+            self.view_label_info.clear()
+        except Exception as e: 
+            fallback = Image.open(theme.filestore['ui']['img']['bug'])
+            view_label_pixmap = image_to_formatted_pixmap(fallback, self.label_size)
+            self.view_label.setPixmap(view_label_pixmap)
+            self.view_label_info.setText(str(e))
+    
+    def generate_met_office_image(self,
+                                  data: dict,
+                                  plot_params: dict) -> Image.Image:
         plt.rcParams['font.family'] = "Nintendo DS BIOS"
 
         self.label_size = int(min(self.view_label.width(), self.view_label.height()))
@@ -67,27 +77,7 @@ class WeatherView(View):
 
         fig, ax = plt_make(plot_params['extent'])
         ax.imshow(map_bg, extent = plot_params['extent'])
-
-        self.plt_add_met_office_view(data, 
-                                     ax, 
-                                     plot_params['extent'])
-
-        self.view_label_info.clear()
-
-        image_buffer = BytesIO()
-        fig.savefig(image_buffer, format = 'png', bbox_inches='tight', pad_inches = 0)
-        plt.close()
-
-        image = Image.open(image_buffer)
-        image = image.resize((self.label_size, self.label_size), resample= Image.Resampling.NEAREST)
-        image = image.convert('1')
-
-        return image
-    
-    def plt_add_met_office_view(self, 
-                                data: dict,
-                                ax: plt.Axes, 
-                                extent: tuple[float, float, float, float]) -> None:
+        
         im: Image.Image = data['image'].convert('L')
 
         # calculations to crop im to map extent
@@ -97,10 +87,10 @@ class WeatherView(View):
         v_scale = im.height / (im_extent[3] - im_extent[2])
 
         #degree differences
-        left_border = extent[0] - im_extent[0]
-        right_border = extent[1] - im_extent[0]
-        bottom_border = extent[2] - im_extent[2]
-        top_border = extent[3] - im_extent[2]
+        left_border =  plot_params['extent'][0] - im_extent[0]
+        right_border =  plot_params['extent'][1] - im_extent[0]
+        bottom_border =  plot_params['extent'][2] - im_extent[2]
+        top_border =  plot_params['extent'][3] - im_extent[2]
 
         # extent in pixels
         new_extent = (
@@ -137,7 +127,7 @@ class WeatherView(View):
 
         # add view to ax
         view.putalpha(160)
-        ax.imshow(view, extent=extent)
+        ax.imshow(view, extent = plot_params['extent'])
 
         # labels
         view_text = []
@@ -193,3 +183,13 @@ class WeatherView(View):
                 verticalalignment = 'top',
                 horizontalalignment = 'center',
                 bbox = legend_bbox)
+        
+        image_buffer = BytesIO()
+        fig.savefig(image_buffer, format = 'png', bbox_inches='tight', pad_inches = 0)
+        plt.close()
+
+        image = Image.open(image_buffer)
+        image = image.resize((self.label_size, self.label_size), resample= Image.Resampling.NEAREST)
+        image = image.convert('1')
+
+        return image

@@ -41,35 +41,60 @@ class StravaView(View):
             return
         
         try: 
-            image = self.generate_plot_vis(data, plot_params)
-            pixmap = image_to_formatted_pixmap(image, self.label_size)
-            self.view_label.setPixmap(pixmap)
-            
             kiosk_data = data['data'][data['kiosk_selected']]
+            view_label_image = self.generate_strava_image(kiosk_data, plot_params)
+            view_label_pixmap = image_to_formatted_pixmap(view_label_image, self.label_size)
+            self.view_label.setPixmap(view_label_pixmap)
+            
             time_str = kiosk_data['start_date'].strftime('%A %d %b, %H:%M')
             run_length = str(round(kiosk_data['distance']/1000,1)) + "k"
             self.view_label_info.setText(f"{time_str}: {run_length}")
         except Exception as e: 
             fallback = Image.open(theme.filestore['ui']['img']['bug'])
-            pixmap = image_to_formatted_pixmap(fallback, self.label_size)
-            self.view_label.setPixmap(pixmap)
+            view_label_pixmap = image_to_formatted_pixmap(fallback, self.label_size)
+            self.view_label.setPixmap(view_label_pixmap)
             self.view_label_info.setText(str(e))
 
-    def generate_plot_vis(self, data: dict, plot_params: dict) -> Image.Image:
+    def generate_strava_image(self,
+                            data: dict,
+                            plot_params: dict) -> Image.Image:
         # map plot setup ----
         plt.rcParams['font.family'] = "Nintendo DS BIOS"
 
         self.label_size = int(min(self.view_label.width(), self.view_label.height()))
-        
-        kiosk_data = data['data'][data['kiosk_selected']]
 
         map_bg =  get_map_image(self.label_size, plot_params, 128, 1)
 
         fig, ax = plt_make(plot_params['extent'])
         ax.imshow(map_bg, extent = plot_params['extent'])
+        
+        if len(data['polyline']) > 0:
+            ax.plot([x[0] for x in data['polyline']],
+                    [x[1] for x in data['polyline']],
+                    color = "#000",
+                    linewidth = 5,
+                    linestyle = 'solid',
+                    zorder = 1)
 
-        plt_add_strava_view(ax, kiosk_data)
-
+            # add flag to finish
+            flag_icon_image = OffsetImage(plt.imread(theme.filestore['ui']['icons']['misc']['checkered_flag']), zoom = 2, interpolation = 'nearest')
+            flag_marker = AnnotationBbox(flag_icon_image, (data['polyline'][-1][0], data['polyline'][-1][1]), frameon = False, annotation_clip = True, box_alignment=(1,0))
+            flag_marker.set_clip_on(True)
+            ax.add_artist(flag_marker)
+            
+        else:
+            # no activity data to plot, show placeholder
+            legend_text = "No recent activity... \nCheck back later!"
+            legend_bbox = dict(alpha = 1, edgecolor = "#000000", facecolor = "#ffffff")
+            ax.text(0.5, 
+                    0.5, 
+                    legend_text, 
+                    transform = ax.transAxes, 
+                    fontsize = 24, 
+                    verticalalignment = 'center',
+                    horizontalalignment = 'center',
+                    bbox = legend_bbox)
+        
         image_buffer = BytesIO()
         fig.savefig(image_buffer, format = 'png', bbox_inches='tight', pad_inches = 0)
         plt.close()
@@ -79,31 +104,3 @@ class StravaView(View):
         image = image.convert('1')
 
         return image
-
-def plt_add_strava_view(ax: plt.Axes, data: dict) -> None:
-    if len(data['polyline']) > 0:
-        ax.plot([x[0] for x in data['polyline']],
-                [x[1] for x in data['polyline']],
-                color = "#000",
-                linewidth = 5,
-                linestyle = 'solid',
-                zorder = 1)
-
-        # add flag to finish
-        flag_icon_image = OffsetImage(plt.imread(theme.filestore['ui']['icons']['misc']['checkered_flag']), zoom = 2, interpolation = 'nearest')
-        flag_marker = AnnotationBbox(flag_icon_image, (data['polyline'][-1][0], data['polyline'][-1][1]), frameon = False, annotation_clip = True, box_alignment=(1,0))
-        flag_marker.set_clip_on(True)
-        ax.add_artist(flag_marker)
-        
-    else:
-        # no activity data to plot, show placeholder
-        legend_text = "No recent activity... \nCheck back later!"
-        legend_bbox = dict(alpha = 1, edgecolor = "#000000", facecolor = "#ffffff")
-        ax.text(0.5, 
-                0.5, 
-                legend_text, 
-                transform = ax.transAxes, 
-                fontsize = 24, 
-                verticalalignment = 'center',
-                horizontalalignment = 'center',
-                bbox = legend_bbox)

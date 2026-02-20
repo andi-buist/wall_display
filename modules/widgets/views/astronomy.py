@@ -43,43 +43,23 @@ class AstronomyView(View):
             return
         
         try: 
-            image = self.generate_plot_vis(data, plot_params)
-            pixmap = image_to_formatted_pixmap(image, self.label_size)
-            self.view_label.setPixmap(pixmap)
+            view_label_image = self.generate_astronomy_image(data, plot_params)
+            view_label_pixmap = image_to_formatted_pixmap(view_label_image, self.label_size)
+            self.view_label.setPixmap(view_label_pixmap)
             self.view_label_info.clear()
         except Exception as e: 
             fallback = Image.open(theme.filestore['ui']['img']['bug'])
-            pixmap = image_to_formatted_pixmap(fallback, self.label_size)
-            self.view_label.setPixmap(pixmap)
+            view_label_pixmap = image_to_formatted_pixmap(fallback, self.label_size)
+            self.view_label.setPixmap(view_label_pixmap)
             self.view_label_info.setText(str(e))
 
-    def generate_plot_vis(self, data: dict, plot_params: dict) -> Image.Image:
+    def generate_astronomy_image(self,
+                                 data: list, 
+                                 plot_params: dict) -> Image.Image:
         # map plot setup ----
         plt.rcParams['font.family'] = "Nintendo DS BIOS"
 
         fig, ax = plt_make(plot_params['extent'])
-        self.plt_add_astronomy(data,
-                               ax, 
-                               plot_params) # +map buffer would have circle perfectly fit square, but we want some allowance for icons
-
-        self.view_label_info.clear()
-
-        image_buffer = BytesIO()
-        fig.savefig(image_buffer, format = 'png', bbox_inches='tight', pad_inches = 0)
-        plt.close()
-
-        image = Image.open(image_buffer)
-        image = image.resize((self.label_size, self.label_size), resample= Image.Resampling.NEAREST)
-        image = image.convert('1')
-
-        return image
-    
-    # plotting function
-
-    def plt_add_astronomy(self, 
-                          data: list, 
-                          ax: plt.Axes, 
-                          plot_params: dict) -> None:
 
         lon_lat = plot_params['centre']
         extent = plot_params['extent']
@@ -168,6 +148,16 @@ class AstronomyView(View):
                     verticalalignment = 'center',
                     horizontalalignment = 'center',
                     bbox = legend_bbox)
+    
+        image_buffer = BytesIO()
+        fig.savefig(image_buffer, format = 'png', bbox_inches='tight', pad_inches = 0)
+        plt.close()
+
+        image = Image.open(image_buffer)
+        image = image.resize((self.label_size, self.label_size), resample= Image.Resampling.NEAREST)
+        image = image.convert('1')
+
+        return image
 
 def get_astronomy_map_data(astro_data:list) -> dict:
         # create a list of permitted celestial bodies
