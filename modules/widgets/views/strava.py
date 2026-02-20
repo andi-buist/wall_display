@@ -25,35 +25,27 @@ class StravaView(View):
     
     def _on_data_update(self): # in Views like strava, this is sort of overkill since no data is extracted, but it's an available timer
         super()._on_data_update()
-
-    def get_latest_data(self):
-        data = self.data_manager.data
-        data = self.kiosk_select_data(data, start_unselected=False)
-
-        plot_params = get_map_traits(data['data'][data['kiosk_selected']]['polyline'])
-
-        return {
-            "plot_params": plot_params,
-            "data": data
-        }
     
     def render(self):
         # Determine label size
         self.label_size = int(min(self.view_label.width(), self.view_label.height()))
 
-        latest_data = self.get_latest_data()
+        data = self.data_manager.data
+        data = self.kiosk_select_data(data, start_unselected=False)
+
+        plot_params = get_map_traits(data['data'][data['kiosk_selected']]['polyline'])
 
         # If no data yet, show placeholder
-        if not latest_data["plot_params"]:
+        if not plot_params:
             self.view_label.setText("Loading...")
             return
         
         try: 
-            image = self.generate_plot_vis(latest_data)
+            image = self.generate_plot_vis(data, plot_params)
             pixmap = image_to_formatted_pixmap(image, self.label_size)
             self.view_label.setPixmap(pixmap)
             
-            kiosk_data = latest_data['data']['data'][latest_data['data']['kiosk_selected']]
+            kiosk_data = data['data'][data['kiosk_selected']]
             time_str = kiosk_data['start_date'].strftime('%A %d %b, %H:%M')
             run_length = str(round(kiosk_data['distance']/1000,1)) + "k"
             self.view_label_info.setText(f"{time_str}: {run_length}")
@@ -63,16 +55,13 @@ class StravaView(View):
             self.view_label.setPixmap(pixmap)
             self.view_label_info.setText(str(e))
 
-    def generate_plot_vis(self, latest_data: dict) -> Image.Image:
+    def generate_plot_vis(self, data: dict, plot_params: dict) -> Image.Image:
         # map plot setup ----
         plt.rcParams['font.family'] = "Nintendo DS BIOS"
 
         self.label_size = int(min(self.view_label.width(), self.view_label.height()))
         
-        data = latest_data['data']
         kiosk_data = data['data'][data['kiosk_selected']]
-
-        plot_params = latest_data['plot_params']
 
         map_bg =  get_map_image(self.label_size, plot_params, 128, 1)
 
@@ -100,6 +89,7 @@ def plt_add_strava_view(ax: plt.Axes, data: dict) -> None:
                 linestyle = 'solid',
                 zorder = 1)
 
+        # add flag to finish
         flag_icon_image = OffsetImage(plt.imread(theme.filestore['ui']['icons']['misc']['checkered_flag']), zoom = 2, interpolation = 'nearest')
         flag_marker = AnnotationBbox(flag_icon_image, (data['polyline'][-1][0], data['polyline'][-1][1]), frameon = False, annotation_clip = True, box_alignment=(1,0))
         flag_marker.set_clip_on(True)

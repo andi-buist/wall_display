@@ -27,34 +27,23 @@ class AstronomyView(View):
         self.view_label_info = QtWidgets.QLabel()
         self.view_label_info.setAlignment(QtCore.Qt.AlignCenter)
         layout.addWidget(self.view_label_info)
-    
-    #TODO: I think this idea needs removing. we shouldn't need to calculate plot params elsewhere and fling them around.
-    # we can just rely on self.data_manager.data
-    def get_latest_data(self):
-        plot_params = get_map_traits([self.data_manager.lon_lat], zoom = 1)
-        
-        # External astronomy data
-        astro = get_astronomy_map_data(self.data_manager.data)
-        astro = self.kiosk_select_data(astro) 
-        
-        return {
-            "plot_params": plot_params,
-            "data": astro
-            }
 
     def render(self):
         # Determine label size
         self.label_size = int(min(self.view_label.width(), self.view_label.height()))
 
-        latest_data = self.get_latest_data()
+        data = get_astronomy_map_data(self.data_manager.data)
+        data = self.kiosk_select_data(data)
+
+        plot_params = get_map_traits([self.data_manager.lon_lat])
 
         # If no data yet, show placeholder
-        if not latest_data["plot_params"]:
+        if not plot_params:
             self.view_label.setText("Loading...")
             return
         
         try: 
-            image = self.generate_plot_vis(latest_data)
+            image = self.generate_plot_vis(data, plot_params)
             pixmap = image_to_formatted_pixmap(image, self.label_size)
             self.view_label.setPixmap(pixmap)
             self.view_label_info.clear()
@@ -64,12 +53,9 @@ class AstronomyView(View):
             self.view_label.setPixmap(pixmap)
             self.view_label_info.setText(str(e))
 
-    def generate_plot_vis(self, latest_data: dict) -> Image.Image:
+    def generate_plot_vis(self, data: dict, plot_params: dict) -> Image.Image:
         # map plot setup ----
         plt.rcParams['font.family'] = "Nintendo DS BIOS"
-        
-        plot_params = latest_data['plot_params']
-        data = latest_data['data']
 
         fig, ax = plt_make(plot_params['extent'])
         self.plt_add_astronomy(data,

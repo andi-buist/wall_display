@@ -290,7 +290,7 @@ class MetOfficeDataManager(APIDataManager):
         # get values as array
         values = np.flip(data[primary_key].values,0)
         value_range = (values.min(), values.max())
-        # normalise
+        # normalise (0 = value_range[0], 255 = value_range[1])
         values = (((values - values.min())/(values.max() - values.min()))*255).astype(np.uint8)
 
         self.data = {"image": Image.fromarray(values),

@@ -17,7 +17,8 @@ import json
 with open("tokens.json") as f: 
     token_config = json.load(f)
 
-HOME_LON_LAT = token_config['home_lon_lat']
+HOME_COORDINATES = (token_config['home_coordinates']['longitude'],
+                    token_config['home_coordinates']['latitude'])
 
 HASS_WS_URL = token_config['hass_config']['url']
 HASS_WS_TOKEN = token_config['hass_config']['secret']
@@ -64,25 +65,25 @@ class HomeApp(QtWidgets.QApplication):
         self.hass_data_manager.data_event.connect(self.on_entity_state_changed)
         self.astro_data_manager = AstronomyDataManager(ASTRONOMY_API_USER_ID, 
                                                        ASTRONOMY_API_USER_SECRET, 
-                                                       HOME_LON_LAT, 
+                                                       HOME_COORDINATES, 
                                                        refresh_rate = 60000)
         self.weather_data_managers = {
             'precipitation': MetOfficeDataManager(MET_OFFICE_API_ORDER_ID,
                                                   MET_OFFICE_API_FILE_IDS['precipitation'],
                                                   MET_OFFICE_API_USER_SECRET,
-                                                  HOME_LON_LAT, 
+                                                  HOME_COORDINATES, 
                                                   'precipitation',
                                                   refresh_rate = 3600000),
             'temperature': MetOfficeDataManager(MET_OFFICE_API_ORDER_ID,
                                                   MET_OFFICE_API_FILE_IDS['temperature'],
                                                   MET_OFFICE_API_USER_SECRET,
-                                                  HOME_LON_LAT, 
+                                                  HOME_COORDINATES, 
                                                   'temperature',
                                                   refresh_rate = 3600000),
             'cloud': MetOfficeDataManager(MET_OFFICE_API_ORDER_ID,
                                           MET_OFFICE_API_FILE_IDS['cloud'],
                                           MET_OFFICE_API_USER_SECRET,
-                                          HOME_LON_LAT, 
+                                          HOME_COORDINATES, 
                                           'cloud',
                                           refresh_rate = 3600000)}
         self.strava_data_manager = StravaDataManager(STRAVA_API_CLIENT_ID,

@@ -133,6 +133,7 @@ def get_map_image(size: tuple[int, int] | int,
     #open as image, resize
     map_bg = Image.open(buffer)
 
+    # if int, implicit 1:1 aspect ratio
     match size:
         case int():
             map_bg = map_bg.resize((size, size), resample= Image.Resampling.NEAREST)
@@ -185,7 +186,6 @@ def get_map_traits(lon_lat: list[tuple[float,float]],
         }
 
 def snap_labels(label_list: list[dict], grouping_threshold: float = 0.1) -> list[dict]:
-    # snapping together close-by labels
     label_coord_list = [x['coords'] for x in label_list]
     label_value_list = [x['value'] for x in label_list]
     pairwise_distances = cdist(label_coord_list, label_coord_list)

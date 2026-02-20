@@ -2,7 +2,7 @@ from modules.widgets.views.base import *
 from PySide6 import QtWidgets
 
 from io import BytesIO
-from PIL import Image
+from PIL import Image, ImageFilter, ImageChops
 import matplotlib.pyplot as plt
 from adjustText import adjust_text
 from typing import Literal
@@ -32,51 +32,45 @@ class WeatherView(View):
     def _on_data_update(self):
         super()._on_data_update() # triggers render() + data_ready
     
-    def get_latest_data(self):
-        # Compute params
-        plot_params = get_map_traits(lon_lat = [self.data_manager.lon_lat], zoom = 1/1000)
-        
-        return {
-            "plot_params": plot_params,
-            "data": self.data_manager.data
-            }
-    
     def render(self):
         # Determine label size
         self.label_size = int(min(self.view_label.width(), self.view_label.height()))
 
-        latest_data = self.get_latest_data()
+        data = self.data_manager.data
+
+        plot_params = get_map_traits(lon_lat = [self.data_manager.lon_lat], zoom = 1/1000)
 
         # If no data yet, show placeholder
-        if not latest_data["plot_params"]:
+        if not plot_params:
             self.view_label.setText("Loading...")
             return
         
-        try: 
-            image = self.generate_plot_vis(latest_data)
-            pixmap = image_to_formatted_pixmap(image, self.label_size)
-            self.view_label.setPixmap(pixmap)
-            self.view_label_info.clear()
-        except Exception as e: 
-            fallback = Image.open(theme.filestore['ui']['img']['bug'])
-            pixmap = image_to_formatted_pixmap(fallback, self.label_size)
-            self.view_label.setPixmap(pixmap)
-            self.view_label_info.setText(str(e))
+        # try: 
+        image = self.generate_plot_vis(data, plot_params)
+        pixmap = image_to_formatted_pixmap(image, self.label_size)
+        self.view_label.setPixmap(pixmap)
+        self.view_label_info.clear()
+        # except Exception as e: 
+        #     fallback = Image.open(theme.filestore['ui']['img']['bug'])
+        #     pixmap = image_to_formatted_pixmap(fallback, self.label_size)
+        #     self.view_label.setPixmap(pixmap)
+        #     self.view_label_info.setText(str(e))
 
-    def generate_plot_vis(self, latest_data: dict) -> Image.Image:
+    def generate_plot_vis(self, data: dict, plot_params: dict) -> Image.Image:
         # map plot setup ----
         plt.rcParams['font.family'] = "Nintendo DS BIOS"
 
         self.label_size = int(min(self.view_label.width(), self.view_label.height()))
         
-        plot_params = latest_data['plot_params']
         map_bg = get_map_image(self.label_size, plot_params, 128, 1)
+        map_bg = ImageChops.multiply(map_bg, map_bg.filter(ImageFilter.CONTOUR)) # enhance borders
 
         fig, ax = plt_make(plot_params['extent'])
         ax.imshow(map_bg, extent = plot_params['extent'])
 
-        self.plt_add_met_office_view(self.data_manager.data, 
-                                     ax, plot_params['extent'])
+        self.plt_add_met_office_view(data, 
+                                     ax, 
+                                     plot_params['extent'])
 
         self.view_label_info.clear()
 
@@ -94,71 +88,79 @@ class WeatherView(View):
                                 data: dict,
                                 ax: plt.Axes, 
                                 extent: tuple[float, float, float, float]) -> None:
-        result = self.data_manager.data
-        view: Image.Image = result['image'].convert('L')
+        im: Image.Image = data['image'].convert('L')
 
-        # calculations to crop view to map extent
-        view_extent = token_config['met_office_atmospheric_models_config']['extent']
+        # calculations to crop im to map extent
+        im_extent = token_config['met_office_atmospheric_models_config']['extent']
         # scales - pixels per degree
-        h_scale = view.width / (view_extent[1] - view_extent[0])
-        v_scale = view.height / (view_extent[3] - view_extent[2])
+        h_scale = im.width / (im_extent[1] - im_extent[0])
+        v_scale = im.height / (im_extent[3] - im_extent[2])
 
         #degree differences
-        left_border = extent[0] - view_extent[0]
-        right_border = extent[1] - view_extent[0]
-        bottom_border = extent[2] - view_extent[2]
-        top_border = extent[3] - view_extent[2]
+        left_border = extent[0] - im_extent[0]
+        right_border = extent[1] - im_extent[0]
+        bottom_border = extent[2] - im_extent[2]
+        top_border = extent[3] - im_extent[2]
 
         # extent in pixels
         new_extent = (
             int(left_border * h_scale),
-            view.height - int(top_border * v_scale),
+            im.height - int(top_border * v_scale),
             int(right_border * h_scale),
-            view.height - int(bottom_border * v_scale)
+            im.height - int(bottom_border * v_scale)
         )
 
         # crop
-        view = view.crop(new_extent)
-        view = view.resize((int(view.size[0]/2), int(view.size[1]/2)), resample= Image.Resampling.BICUBIC)
-        view = view.resize((self.label_size, self.label_size), resample= Image.Resampling.BICUBIC)
-        
-        # calculate contour label positions, values, etc.
-        arr = np.array(view)
+        im = im.crop(new_extent)
+        im = im.resize((int(im.size[0]/2), int(im.size[1]/2)), resample= Image.Resampling.BICUBIC)
+        im = im.resize((self.label_size, self.label_size), resample= Image.Resampling.BICUBIC)
 
-        quantization_bin = 32
+        # image array - float (0,1)
+        arr = np.array(im)
+        # calculate the value range of the cropped image
+        data['value_range'] = tuple(data['value_range'][0] + ((bound / 255) *  (data['value_range'][1] - data['value_range'][0])) for bound in (arr.min(), arr.max()))
+        # normalise
+        arr = (((arr - arr.min()) / (arr.max() - arr.min())) * 255).astype(np.uint8)
+
+        quantization_bin = 64
         arr = (arr // quantization_bin) * quantization_bin
-
-        # invert if precip, temp, else we want to keep clouds white
-        match self.data_manager.model_type:
-            case "precipitation" | "temperature":
-                view = Image.fromarray(255 - arr)
-            case _:
-                view = Image.fromarray(arr)
-
-        # add view to ax
-        view.putalpha(196)
-        ax.imshow(view, extent=extent)
-
-        view_text = []
-
         unique_values = np.unique(arr)
 
+        # invert if precip (dark = rainy)
+        match self.data_manager.model_type:
+            case "precipitation":
+                view = Image.fromarray(255 - arr, mode = 'L')
+            case _:
+                view = Image.fromarray(arr, mode = 'L')
+
+        view = ImageChops.multiply(view, view.filter(ImageFilter.CONTOUR)) # enhance borders
+
+        # add view to ax
+        view.putalpha(160)
+        ax.imshow(view, extent=extent)
+
+        # labels
+        view_text = []
+        # generate masks from arr unique values, create a label for contiguous area
         if len(unique_values) != 1: # 0 (shouldn't happen) or >1, add labels foreach
             for value in unique_values:
                 mask = arr == value # TODO: add masks to a list and use kiosk to highlight each in turn? Add to ax in separate passes...
                 if mask.any():
-                    label_arr, n_labels = ndimage.label(mask)
-                    for idx in range(1, n_labels + 1):
-                        mask_image = label_arr == idx
-                        if mask_image.sum() > 32 and mask_image.sum() < ((self.label_size ** 2) - 32): # number of valid pixels
-                            y,x = ndimage.center_of_mass(mask_image) # row, col
+                    partition_arr, n_partitions = ndimage.label(mask,
+                                                                structure = [[1,1,1],
+                                                                             [1,1,1],
+                                                                             [1,1,1]]) # partition each contiguous piece of the mask (include diags)
+                    for idx in range(1, n_partitions + 1):
+                        mask_partition = partition_arr == idx
+                        if mask_partition.sum() > 32 and mask_partition.sum() < ((self.label_size ** 2) - 32): # number of valid pixels
+                            y,x = ndimage.center_of_mass(mask_partition) # row, col
                             x = float(x)/self.label_size
                             y = (self.label_size - float(y))/self.label_size # coords are from top left
                             view_text.append({"coords": (x,y), "value": value})
         else: # 1 value, add central label
             view_text.append({"coords": (0.5,0.5), "value": unique_values[0]})
 
-        view_text = snap_labels(view_text, 0.25)
+        view_text = snap_labels(view_text, 0.33)
 
         #legends, labels
         legend_bbox = dict(alpha = 1, edgecolor = "#000000", facecolor = "#ffffff")
@@ -168,7 +170,7 @@ class WeatherView(View):
             case "cloud"|"precipitation":
                 [x.update(value = str(int((x['value']/255) * 100)) + "%") for x in view_text]
             case "temperature":
-                [x.update(value = str(int(result['value_range'][0] + ((x['value']/255) *  (result['value_range'][1] - result['value_range'][0])) - 273.15)) + "c") for x in view_text] # kelvin to c
+                [x.update(value = str(round(data['value_range'][0] + ((x['value']/255) *  (data['value_range'][1] - data['value_range'][0])) - 273.15, 1)) + "c") for x in view_text] # kelvin to c
 
 
         for label in view_text:
@@ -185,7 +187,7 @@ class WeatherView(View):
         # Add timestamp
         ax.text(0.5, 
                 0.975, 
-                f"Updated: {result['timestamp'].strftime('%A %d %H:%M')}", 
+                f"Updated: {data['timestamp'].strftime('%A %d %H:%M')}", 
                 transform = ax.transAxes, 
                 fontsize = 24, 
                 verticalalignment = 'top',
