@@ -1,10 +1,12 @@
+.env
 env/
 .cache/
 __pycache__/
+cache
 data/
 *.pyc
 *.pyo
 tokens.json
 tokens.json.backup
-test.ipynb
-profile_output
+*.ipynb
+profile_output.txt

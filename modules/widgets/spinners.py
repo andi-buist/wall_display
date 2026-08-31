@@ -188,8 +188,6 @@ class RGBSpinner(HASSWidget):
             if entity['attributes']['brightness']:
                 rgb = get_value_adjusted_rgb(rgb, entity['attributes']['brightness'])
 
-            #print(get_colour_name(adj_rgb))
-
             msg_template = dict(type = "call_service",
                                 domain = "light",
                                 target = dict(entity_id = entity_id))

@@ -74,7 +74,8 @@ class View(QtWidgets.QWidget):
         """Override in subclasses"""
         print(f"{self} is still using the base.py render() function. Are you sure your subclass is set up correctly?")
         pass
-    
+
+# Some functions that are common to many `View`s ---------------------------------------------------
 def map_plot_make(extent: tuple[float,float,float,float] = None):
     """
     Generates a matplotlib.fig, ax without axes & with axis limits se tto the required extent range

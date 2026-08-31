@@ -1,0 +1,53 @@
+{
+    "home_coordinates": {
+        "latitude": 0.0,
+        "longitude": 0.0
+    },
+    "hass_config": {
+        "url": "ws://your.home.assistant.ip.here:port/api/websocket",
+        "secret": "hass ws secret"
+    },
+    "astronomy_config": {
+        "id": "api.astronomyapi.com ID",
+        "secret": "secret"
+    },
+    "gcal_config": {
+        "client_id": "apps.googleusercontent.com Google calendars ID",
+        "secret": "secret"
+    },
+    "met_office_map_images_config": {
+        "order_id": "MET Office API order ID",
+        "extent": [
+            -8.0,
+            4.0,
+            45.0,
+            56.0
+        ],
+        "file_id": {
+            "cloud": "cloud_amount_total_ts",
+            "precipitation": "total_precipitation_rate_ts",
+            "temperature": "temperature_at_surface_ts"
+        },
+        "secret": "secret"
+    },
+    "met_office_atmospheric_models_config": {
+        "order_id": "same again",
+        "extent": [
+            -8.0,
+            4.0,
+            45.0,
+            56.0
+        ],
+        "file_id": {
+            "cloud": "atmosphere_total-cloud-cover_+00_",
+            "precipitation": "ground_total-precipitation-rate_+00_",
+            "temperature": "agl_temperature_1.5_+00_"
+        },
+        "secret": "same again"
+    },
+    "strava_config": {
+        "client_id": "Strava client ID",
+        "client_secret": "secret",
+        "refresh_token": "refresh token - see /modules/api/get_data.py for more info. Strava secret config is a bit hands on. I suggest making a ipynb to run it first time"
+    }
+}

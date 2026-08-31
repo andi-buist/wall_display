@@ -58,15 +58,17 @@ class HomeApp(QtWidgets.QApplication):
         self.window.setCentralWidget(central_widget)
         layout = QtWidgets.QHBoxLayout(central_widget)
 
-        # Create DataManagers
+        # Create DataManagers -----------------------------------------------------------------
         self.hass_data_manager = HASSDataManager(HASS_WS_URL, 
                                                  HASS_WS_TOKEN, 
                                                  refresh_rate = 60000)
         self.hass_data_manager.data_event.connect(self.on_entity_state_changed)
+
         self.astro_data_manager = AstronomyDataManager(ASTRONOMY_API_USER_ID, 
                                                        ASTRONOMY_API_USER_SECRET, 
                                                        HOME_COORDINATES, 
                                                        refresh_rate = 60000)
+        
         self.weather_data_managers = {
             'precipitation': MetOfficeDataManager(MET_OFFICE_API_ORDER_ID,
                                                   MET_OFFICE_API_FILE_IDS['precipitation'],
@@ -86,10 +88,12 @@ class HomeApp(QtWidgets.QApplication):
                                           HOME_COORDINATES, 
                                           'cloud',
                                           refresh_rate = 3600000)}
+        
         self.strava_data_manager = StravaDataManager(STRAVA_API_CLIENT_ID,
                                                      STRAVA_API_CLIENT_SECRET,
                                                      STRAVA_API_REFRESH_TOKEN,
                                                      refresh_rate=3600000)
+        # --------------------------------------------------------------------------------------
 
         # TODO: worth converting to its own LightingPanel widget maybe? could have options for RGB, Temp, cute icon
         slider_test = QtWidgets.QWidget()
@@ -109,7 +113,7 @@ class HomeApp(QtWidgets.QApplication):
             {'label': "Map",
              'widget': Viewer(self.kiosk_controller,
                               view_options = {
-                                  #"map": (MapView,{}),
+                                  "map": (MapView,{"data_manager": self.hass_data_manager}),
                                   "astronomy": (AstronomyView, {"data_manager": self.astro_data_manager, "kiosk_controller": self.kiosk_controller}),
                                   "weather: precipitation": (WeatherView, {"data_manager": self.weather_data_managers['precipitation']}),
                                   "weather: temperature": (WeatherView, {"data_manager": self.weather_data_managers['temperature']}),
@@ -117,7 +121,7 @@ class HomeApp(QtWidgets.QApplication):
                                   "strava": (StravaView, {"data_manager": self.strava_data_manager, "kiosk_controller": self.kiosk_controller})
                                   },
                                   infobox_options = {
-                                    "strava": (StravaInfoBox, {"data_manager": self.strava_data_manager, "kiosk_controller": self.kiosk_controller})
+                                  "strava": (StravaInfoBox, {"data_manager": self.strava_data_manager, "kiosk_controller": self.kiosk_controller})
                                   }
                                   )},
             {'label': "Terminal",
@@ -159,4 +163,5 @@ class HomeApp(QtWidgets.QApplication):
 
     def on_entity_state_changed(self, entity):
         # Update only the widget(s) for this entity
+        # TODO: change to logging.logger
         print(f"Heard data update, {entity['entity_id']} [state: {entity['state']}]")

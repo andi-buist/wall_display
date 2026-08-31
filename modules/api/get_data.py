@@ -1,6 +1,8 @@
+# NOTE: this is now archived. Keeping here for preservation because Strava OAuth is horrid.
+
 # TODO: move this to readme eventually
 # many of these get_xxx() functions have equivalents with similar names in widget modules, like map.py.
-# the way I tried to define the separation between the two is that get_data.py get_xxx() functions should 
+# the way I tried to define the separation between the two is that get_data.py `get_xxx()` functions should 
 # return as much raw-ish data as possible from the API under minimal constraints, producing `something`
 # widget get_xxx() functions should ingest `something` and further manipulate it to make data ingestible for UI
 # functions. e.g. Strava data is tricky and requires several API calls. rather than wrap the Client in multiple
